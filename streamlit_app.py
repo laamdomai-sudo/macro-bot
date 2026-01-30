@@ -135,72 +135,73 @@ st.title("📊 Phân Tích Tương Quan Lãi Suất & Kim Loại Quý")
 
 @st.cache_data(ttl=3600)
 def get_macro_data():
-    # Tickers: Vàng, DXY, LS Mỹ 10Y (^TNX), LS Nhật 10Y (^JGBSY), Tỷ giá USDVND (USDVND=X)
+    # Tickers: Vàng, DXY, LS Mỹ 10Y, LS Nhật 10Y, Tỷ giá USDVND
     tickers = ['GC=F', 'DX-Y.NYB', '^TNX', '^JGBSY', 'USDVND=X']
     raw = yf.download(tickers, period="2y", auto_adjust=True)
     
+    if raw.empty:
+        return pd.DataFrame()
+
     df = pd.DataFrame(index=raw.index)
     try:
-        df['Gold'] = raw['Close']['GC=F']
-        df['DXY'] = raw['Close']['DX-Y.NYB']
-        df['US_10Y'] = raw['Close']['^TNX']
-        df['JPY_10Y'] = raw['Close']['^JGBSY']
-        df['USDVND'] = raw['Close']['USDVND=X']
-    except:
-        # Dự phòng Multi-index
+        # Sử dụng .xs để bóc tách dữ liệu an toàn từ Multi-index
         df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
         df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
         df['US_10Y'] = raw.xs('^TNX', axis=1, level=1)['Close']
         df['JPY_10Y'] = raw.xs('^JGBSY', axis=1, level=1)['Close']
         df['USDVND'] = raw.xs('USDVND=X', axis=1, level=1)['Close']
+    except Exception:
+        # Cách lấy dự phòng nếu format đơn giản
+        for t, name in zip(tickers, ['Gold', 'DXY', 'US_10Y', 'JPY_10Y', 'USDVND']):
+            if t in raw['Close']:
+                df[name] = raw['Close'][t]
     
-    return df.fillna(method='ffill').dropna()
+    # Điền dữ liệu trống bằng giá trị gần nhất để tránh lỗi out-of-bounds
+    return df.ffill().dropna()
 
 try:
     df = get_macro_data()
     
-    # Tính toán biến động
-    last_us = df['US_10Y'].iloc[-1]
-    last_jpy = df['JPY_10Y'].iloc[-1]
-    spread = last_us - last_jpy
-    last_vnd = df['USDVND'].iloc[-1]
+    if df.empty or len(df) < 2:
+        st.warning("⚠️ Đang chờ dữ liệu từ Yahoo Finance... Hãy nhấn 'Reboot App' nếu lỗi kéo dài.")
+    else:
+        # Lấy giá trị phiên hiện tại và phiên trước
+        curr = df.iloc[-1]
+        prev = df.iloc[-2]
 
-    # 2. Hiển thị thông tin tóm tắt
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Lãi suất Mỹ (10Y)", f"{last_us:.2f}%")
-    c2.metric("Lãi suất Nhật (10Y)", f"{last_jpy:.3f}%")
-    c3.metric("Tỷ giá USD/VND", f"{last_vnd:,.0f} đ")
+        # 2. Hiển thị Metrics
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Lãi suất Mỹ (10Y)", f"{curr['US_10Y']:.2f}%", f"{curr['US_10Y'] - prev['US_10Y']:.2f}")
+        c2.metric("Lãi suất Nhật (10Y)", f"{curr['JPY_10Y']:.3f}%", f"{curr['JPY_10Y'] - prev['JPY_10Y']:.3f}")
+        c3.metric("Tỷ giá USD/VND", f"{curr['USDVND']:,.0f} đ", f"{curr['USDVND'] - prev['USDVND']:,.0f}")
 
-    # 3. Biểu đồ tương quan chính
-    fig = make_subplots(
-        rows=3, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.07,
-        subplot_titles=("Sức mạnh Vàng vs DXY", "Tương quan Lãi suất Mỹ vs Nhật (Kịch bản Carry Trade)", "Biến động Tỷ giá USD/VND"),
-        row_heights=[0.4, 0.4, 0.2]
-    )
+        # 3. Vẽ biểu đồ tương quan
+        fig = make_subplots(
+            rows=3, cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.07,
+            subplot_titles=("Giá Vàng (Vàng) & Chỉ số DXY (Xanh)", "So sánh Lãi suất Mỹ (Đỏ) vs Nhật (Xanh Lá)", "Tỷ giá USD/VND"),
+            row_heights=[0.4, 0.4, 0.2]
+        )
 
-    # Tầng 1: Vàng vs DXY
-    fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700')), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['DXY']*45, name="DXY (quy đổi)", line=dict(color='#00CCFF', dash='dot')), row=1, col=1)
+        # Tầng 1: Gold & DXY
+        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'] * (df['Gold'].max()/df['DXY'].max()), name="DXY (Quy đổi)", line=dict(color='#00CCFF', dash='dot')), row=1, col=1)
 
-    # Tầng 2: So sánh trực tiếp LS Mỹ & Nhật
-    fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'], name="Lãi suất Mỹ (10Y)", line=dict(color='#FF4B4B', width=2)), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="Lãi suất Nhật (10Y)", line=dict(color='#00FF00', width=2)), row=2, col=1)
-    # Thêm vùng chênh lệch (Spread)
-    fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'] - df['JPY_10Y'], name="Chênh lệch (Spread)", fill='tozeroy', line=dict(color='rgba(255, 255, 255, 0.2)')), row=2, col=1)
+        # Tầng 2: LS Mỹ vs Nhật (Gộp chung để thấy Spread)
+        fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'], name="LS Mỹ 10Y", line=dict(color='#FF4B4B')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="LS Nhật 10Y", line=dict(color='#00FF00')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'] - df['JPY_10Y'], name="Chênh lệch (Spread)", fill='tozeroy', line=dict(width=0)), row=2, col=1)
 
-    # Tầng 3: Biểu đồ riêng cho VND (Tỷ giá làm đại diện cho sức mạnh tiền tệ)
-    fig.add_trace(go.Scatter(x=df.index, y=df['USDVND'], name="USD/VND", line=dict(color='#FF00FF')), row=3, col=1)
+        # Tầng 3: Tỷ giá VND
+        fig.add_trace(go.Scatter(x=df.index, y=df['USDVND'], name="USD/VND", line=dict(color='#FF00FF')), row=3, col=1)
 
-    fig.update_layout(height=1000, template="plotly_dark", hovermode="x unified")
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(height=900, template="plotly_dark", hovermode="x unified")
+        st.plotly_chart(fig, use_container_width=True)
 
-    # 4. Phân tích tự động
-    st.info(f"""
-    💡 **Phân tích tương quan:** - Chênh lệch lãi suất Mỹ - Nhật hiện là **{spread:.2f}%**. Khi khoảng cách này nới rộng, đồng Yên (JPY) sẽ yếu đi và DXY mạnh lên.
-    - **VND:** Biểu đồ tỷ giá USD/VND phản ánh áp lực lãi suất. Nếu đường tỷ giá dốc lên mạnh, điều đó cho thấy lãi suất VND đang chịu áp lực phải tăng để giữ giá tiền tệ.
-    """)
+        # 4. Phân tích tự động
+        spread = curr['US_10Y'] - curr['JPY_10Y']
+        st.info(f"💡 **Phân tích:** Chênh lệch lãi suất Mỹ - Nhật hiện là **{spread:.2f}%**. Khoảng cách này càng rộng thì áp lực mất giá lên đồng Yên và VND càng lớn.")
 
 except Exception as e:
-    st.error(f"Lỗi: {e}")
+    st.error(f"Đã xảy ra lỗi: {e}")
