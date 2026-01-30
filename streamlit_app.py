@@ -126,82 +126,95 @@ except Exception as e:
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import pandas as pd
 
-# 1. Cấu hình trang
-st.set_page_config(page_title="Macro Correlation Dashboard", layout="wide")
-st.title("📊 Phân Tích Tương Quan Lãi Suất & Kim Loại Quý")
+st.set_page_config(page_title="Interest Rate Correlation", layout="wide")
+st.title("📊 Biểu Đồ Tương Quan Lãi Suất Toàn Cầu (USD - JPY - VND)")
 
 @st.cache_data(ttl=3600)
 def get_macro_data():
-    # Tickers: Vàng, DXY, LS Mỹ 10Y, LS Nhật 10Y, Tỷ giá USDVND
-    tickers = ['GC=F', 'DX-Y.NYB', '^TNX', '^JGBSY', 'USDVND=X']
+    # Tickers: LS Mỹ 10Y, LS Nhật 10Y, Tỷ giá USDVND
+    tickers = ['^TNX', '^JGBSY', 'USDVND=X']
     raw = yf.download(tickers, period="2y", auto_adjust=True)
     
-    if raw.empty:
-        return pd.DataFrame()
+    if raw.empty: return pd.DataFrame()
 
     df = pd.DataFrame(index=raw.index)
     try:
-        # Sử dụng .xs để bóc tách dữ liệu an toàn từ Multi-index
-        df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
-        df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
         df['US_10Y'] = raw.xs('^TNX', axis=1, level=1)['Close']
         df['JPY_10Y'] = raw.xs('^JGBSY', axis=1, level=1)['Close']
         df['USDVND'] = raw.xs('USDVND=X', axis=1, level=1)['Close']
-    except Exception:
-        # Cách lấy dự phòng nếu format đơn giản
-        for t, name in zip(tickers, ['Gold', 'DXY', 'US_10Y', 'JPY_10Y', 'USDVND']):
-            if t in raw['Close']:
-                df[name] = raw['Close'][t]
+    except:
+        df['US_10Y'] = raw['Close']['^TNX']
+        df['JPY_10Y'] = raw['Close']['^JGBSY']
+        df['USDVND'] = raw['Close']['USDVND=X']
     
-    # Điền dữ liệu trống bằng giá trị gần nhất để tránh lỗi out-of-bounds
     return df.ffill().dropna()
 
 try:
     df = get_macro_data()
     
-    if df.empty or len(df) < 2:
-        st.warning("⚠️ Đang chờ dữ liệu từ Yahoo Finance... Hãy nhấn 'Reboot App' nếu lỗi kéo dài.")
-    else:
-        # Lấy giá trị phiên hiện tại và phiên trước
-        curr = df.iloc[-1]
-        prev = df.iloc[-2]
+    if not df.empty:
+        # 1. Tạo biểu đồ với 2 trục Y
+        fig = go.Figure()
 
-        # 2. Hiển thị Metrics
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Lãi suất Mỹ (10Y)", f"{curr['US_10Y']:.2f}%", f"{curr['US_10Y'] - prev['US_10Y']:.2f}")
-        c2.metric("Lãi suất Nhật (10Y)", f"{curr['JPY_10Y']:.3f}%", f"{curr['JPY_10Y'] - prev['JPY_10Y']:.3f}")
-        c3.metric("Tỷ giá USD/VND", f"{curr['USDVND']:,.0f} đ", f"{curr['USDVND'] - prev['USDVND']:,.0f}")
+        # Thêm Lãi suất Mỹ (Trục trái)
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['US_10Y'],
+            name="Lãi suất Mỹ 10Y (%)",
+            line=dict(color='#FF4B4B', width=3)
+        ))
 
-        # 3. Vẽ biểu đồ tương quan
-        fig = make_subplots(
-            rows=3, cols=1, 
-            shared_xaxes=True, 
-            vertical_spacing=0.07,
-            subplot_titles=("Giá Vàng (Vàng) & Chỉ số DXY (Xanh)", "So sánh Lãi suất Mỹ (Đỏ) vs Nhật (Xanh Lá)", "Tỷ giá USD/VND"),
-            row_heights=[0.4, 0.4, 0.2]
+        # Thêm Lãi suất Nhật (Trục trái)
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['JPY_10Y'],
+            name="Lãi suất Nhật 10Y (%)",
+            line=dict(color='#00FF00', width=3)
+        ))
+
+        # Thêm Tỷ giá VND (Trục phải - Secondary Y)
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['USDVND'],
+            name="Tỷ giá USD/VND (Trục phải)",
+            line=dict(color='#FF00FF', width=2, dash='dot'),
+            yaxis="y2"
+        ))
+
+        # 2. Thiết lập bố cục trục kép
+        fig.update_layout(
+            height=700,
+            template="plotly_dark",
+            hovermode="x unified",
+            title="Sự tương quan giữa Lãi suất (Mỹ-Nhật) và Tỷ giá VND",
+            yaxis=dict(
+                title="Lãi suất (%)",
+                titlefont=dict(color="#FF4B4B"),
+                tickfont=dict(color="#FF4B4B")
+            ),
+            yaxis2=dict(
+                title="Tỷ giá USD/VND",
+                titlefont=dict(color="#FF00FF"),
+                tickfont=dict(color="#FF00FF"),
+                overlaying="y",
+                side="right"
+            ),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
-        # Tầng 1: Gold & DXY
-        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'] * (df['Gold'].max()/df['DXY'].max()), name="DXY (Quy đổi)", line=dict(color='#00CCFF', dash='dot')), row=1, col=1)
-
-        # Tầng 2: LS Mỹ vs Nhật (Gộp chung để thấy Spread)
-        fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'], name="LS Mỹ 10Y", line=dict(color='#FF4B4B')), row=2, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="LS Nhật 10Y", line=dict(color='#00FF00')), row=2, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'] - df['JPY_10Y'], name="Chênh lệch (Spread)", fill='tozeroy', line=dict(width=0)), row=2, col=1)
-
-        # Tầng 3: Tỷ giá VND
-        fig.add_trace(go.Scatter(x=df.index, y=df['USDVND'], name="USD/VND", line=dict(color='#FF00FF')), row=3, col=1)
-
-        fig.update_layout(height=900, template="plotly_dark", hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
 
-        # 4. Phân tích tự động
+        # 3. Phân tích tương quan
+        st.subheader("🤖 Nhận định tương quan")
+        curr = df.iloc[-1]
         spread = curr['US_10Y'] - curr['JPY_10Y']
-        st.info(f"💡 **Phân tích:** Chênh lệch lãi suất Mỹ - Nhật hiện là **{spread:.2f}%**. Khoảng cách này càng rộng thì áp lực mất giá lên đồng Yên và VND càng lớn.")
+        
+        st.info(f"""
+        - **Chênh lệch lãi suất (Spread):** Hiện tại là **{spread:.2f}%**. 
+        - **Quan sát:** Khi đường màu Đỏ (Mỹ) và Xanh lá (Nhật) càng xa nhau, đường màu Hồng (VND) thường có xu hướng dốc lên do áp lực tỷ giá tăng cao. 
+        - **Điểm đảo chiều:** Nếu khoảng cách Mỹ-Nhật thu hẹp, áp lực lên VND sẽ giảm bớt.
+        """)
+    else:
+        st.error("Không có dữ liệu. Vui lòng kiểm tra lại kết nối.")
 
 except Exception as e:
-    st.error(f"Đã xảy ra lỗi: {e}")
+    st.error(f"Lỗi: {e}")
