@@ -3,32 +3,41 @@ import yfinance as yf
 import plotly.graph_objects as go
 import pandas as pd
 
-# 1. Cấu hình trang
-st.set_page_config(page_title="FX & Rates Correlation", layout="wide")
-st.title("🏦 Tương Quan Lãi Suất & Tỷ Giá Hối Đoái")
+# 1. Cấu hình
+st.set_page_config(page_title="FX & Rates Fast Load", layout="wide")
+st.title("🏦 Tương Quan Lãi Suất & Tỷ Giá (Tối ưu tốc độ)")
 
-# Nhập liệu thủ công cho VND nếu dữ liệu Yahoo lỗi
+# Sidebar để cấu hình dự phòng
 with st.sidebar:
-    st.header("⚙️ Cấu hình dữ liệu")
-    manual_vnd_rate = st.number_input("Lãi suất VND 10Y hiện tại (%):", value=2.7, step=0.1)
-    st.info("Dữ liệu tỷ giá USD/VND và USD/JPY được lấy trực tiếp từ Yahoo Finance.")
+    st.header("⚙️ Cấu hình dự phòng")
+    st.info("Nếu dữ liệu VND từ máy chủ bị chậm, hệ thống sẽ tự động dùng giá trị này.")
+    manual_vnd_rate = st.number_input("Lãi suất VND 10Y (%)", value=2.7, step=0.1)
+    manual_vnd_fx = st.number_input("Tỷ giá USD/VND dự phòng", value=25400, step=10)
 
-@st.cache_data(ttl=3600)
-def get_full_data():
-    # Tickers lãi suất: US10Y (^TNX), JP10Y (JG10.V)
-    # Tickers tỷ giá: USDVND=X, USDJPY=X
-    tickers = ['^TNX', 'JG10.V', 'USDVND=X', 'USDJPY=X']
-    raw = yf.download(tickers, period="2y", auto_adjust=True)
+@st.cache_data(ttl=600) # Giảm cache xuống 10 phút để cập nhật nhanh hơn
+def get_fast_data():
+    # Nhóm 1: Các mã chính (Cực kỳ ổn định)
+    main_tickers = ['^TNX', 'JG10.V', 'USDJPY=X', 'USDVND=X']
+    df_main = yf.download(main_tickers, period="1y", interval="1d", group_by='ticker', timeout=10)
     
-    df = pd.DataFrame(index=raw.index)
+    df = pd.DataFrame(index=df_main.index)
+    
+    # Trích xuất dữ liệu an toàn
     try:
-        df['USD_10Y'] = raw['Close']['^TNX']
-        df['JPY_10Y'] = raw['Close']['JG10.V']
-        df['USDVND'] = raw['Close']['USDVND=X']
-        df['USDJPY'] = raw['Close']['USDJPY=X']
-        
-        # Lấy dữ liệu VND 10Y (nếu có)
-        vn_bond = yf.download('VND10Y=RR', period="2y")['Close']
+        df['USD_10Y'] = df_main['^TNX']['Close']
+        df['JPY_10Y'] = df_main['JG10.V']['Close']
+        df['USDJPY'] = df_main['USDJPY=X']['Close']
+        df['USDVND'] = df_main['USDVND=X']['Close']
+    except Exception:
+        # Fallback nếu cấu trúc dataframe khác (Multi-index)
+        df['USD_10Y'] = df_main.xs('^TNX', axis=1, level=0)['Close']
+        df['JPY_10Y'] = df_main.xs('JG10.V', axis=1, level=0)['Close']
+        df['USDJPY'] = df_main.xs('USDJPY=X', axis=1, level=0)['Close']
+        df['USDVND'] = df_main.xs('USDVND=X', axis=1, level=0)['Close']
+
+    # Nhóm 2: Thử tải VND Bond (Thường gây chậm)
+    try:
+        vn_bond = yf.download('VND10Y=RR', period="1y", timeout=5)['Close']
         if not vn_bond.empty:
             df['VND_10Y'] = vn_bond
         else:
@@ -36,73 +45,48 @@ def get_full_data():
     except:
         df['VND_10Y'] = manual_vnd_rate
         
-    return df.ffill().dropna()
+    return df.ffill().fillna(method='bfill')
 
 try:
-    df = get_full_data()
+    with st.spinner('🚀 Đang kết nối máy chủ tài chính...'):
+        df = get_fast_data()
     
-    if not df.empty:
+    if not df.empty and 'USDVND' in df.columns:
         curr = df.iloc[-1]
         prev = df.iloc[-2]
 
-        # 2. Hiển thị Metrics chính
+        # 2. Hiển thị Metrics
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("USD/VND", f"{curr['USDVND']:,.0f}", f"{curr['USDVND'] - prev['USDVND']:,.0f}")
         m2.metric("USD/JPY", f"{curr['USDJPY']:.2f}", f"{curr['USDJPY'] - prev['USDJPY']:.2f}")
-        m3.metric("Lãi suất Mỹ (10Y)", f"{curr['USD_10Y']:.2f}%")
-        m4.metric("Chênh lệch US-VN", f"{curr['USD_10Y'] - curr['VND_10Y']:.2f}%")
+        m3.metric("Lãi suất Mỹ", f"{curr['USD_10Y']:.2f}%")
+        m4.metric("Lãi suất Nhật", f"{curr['JPY_10Y']:.3f}%")
 
-        # 3. BIỂU ĐỒ 1: SO SÁNH LÃI SUẤT
-        st.subheader("📈 1. Biến Động Lãi Suất Trái Phiếu (Thủ phạm gây áp lực)")
+        # 3. Biểu đồ Lãi suất
         fig_rates = go.Figure()
-        fig_rates.add_trace(go.Scatter(x=df.index, y=df['USD_10Y'], name="Lãi suất USD", line=dict(color='#FF4B4B', width=2)))
-        fig_rates.add_trace(go.Scatter(x=df.index, y=df['VND_10Y'], name="Lãi suất VND", line=dict(color='#FBC02D', width=2)))
-        fig_rates.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="Lãi suất JPY (Phải)", yaxis="y2", line=dict(color='#1E88E5', width=1)))
+        fig_rates.add_trace(go.Scatter(x=df.index, y=df['USD_10Y'], name="US 10Y", line=dict(color='#FF4B4B')))
+        fig_rates.add_trace(go.Scatter(x=df.index, y=df['VND_10Y'], name="VN 10Y", line=dict(color='#FBC02D')))
+        fig_rates.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="JP 10Y (Trục phải)", yaxis="y2", line=dict(color='#1E88E5')))
         
-        fig_rates.update_layout(
-            height=400, template="plotly_dark", hovermode="x unified",
-            yaxis=dict(title="Lãi suất (%)"),
-            yaxis2=dict(overlaying="y", side="right", showgrid=False),
-            margin=dict(t=20, b=20)
-        )
+        fig_rates.update_layout(height=350, template="plotly_dark", title="Mặt bằng Lãi suất",
+                                yaxis2=dict(overlaying="y", side="right", showgrid=False), margin=dict(t=30, b=0))
         st.plotly_chart(fig_rates, use_container_width=True)
 
-        # 4. BIỂU ĐỒ 2: BIẾN ĐỘNG TỶ GIÁ
-        st.subheader("💱 2. Biến Động Tỷ Giá Hối Đoái (Hệ quả thực tế)")
+        # 4. Biểu đồ Tỷ giá
         fig_fx = go.Figure()
-        fig_fx.add_trace(go.Scatter(x=df.index, y=df['USDVND'], name="Tỷ giá USD/VND", line=dict(color='#00C853', width=2)))
-        fig_fx.add_trace(go.Scatter(x=df.index, y=df['USDJPY'], name="Tỷ giá USD/JPY (Phải)", yaxis="y2", line=dict(color='#AA00FF', width=2)))
+        fig_fx.add_trace(go.Scatter(x=df.index, y=df['USDVND'], name="USD/VND", line=dict(color='#00C853')))
+        fig_fx.add_trace(go.Scatter(x=df.index, y=df['USDJPY'], name="USD/JPY (Trục phải)", yaxis="y2", line=dict(color='#AA00FF')))
         
-        fig_fx.update_layout(
-            height=400, template="plotly_dark", hovermode="x unified",
-            yaxis=dict(title="USD/VND (VNĐ)"),
-            yaxis2=dict(overlaying="y", side="right", showgrid=False, title="USD/JPY (Yên)"),
-            xaxis=dict(rangeslider=dict(visible=True)),
-            margin=dict(t=20, b=20)
-        )
+        fig_fx.update_layout(height=350, template="plotly_dark", title="Biến động Tỷ giá",
+                             yaxis2=dict(overlaying="y", side="right", showgrid=False), margin=dict(t=30, b=0))
         st.plotly_chart(fig_fx, use_container_width=True)
 
-        # 5. PHÂN TÍCH TỰ ĐỘNG
-        st.divider()
-        st.subheader("🤖 Nhận Định Liên Thị Trường")
-        col_a, col_b = st.columns(2)
-        
-        with col_a:
-            spread_vn = curr['USD_10Y'] - curr['VND_10Y']
-            if spread_vn > 0.5:
-                st.error(f"🔴 **Cảnh báo USD/VND:** Chênh lệch lãi suất đang ở mức cao ({spread_vn:.2f}%). Áp lực mất giá lên VND sẽ còn tiếp diễn nếu NHNN không can thiệp lãi suất.")
-            else:
-                st.success("🟢 **Ổn định USD/VND:** Chênh lệch lãi suất đang ở mức an toàn, hỗ trợ tỷ giá ổn định.")
-
-        with col_b:
-            spread_jp = curr['USD_10Y'] - curr['JPY_10Y']
-            if spread_jp > 3.0:
-                st.warning(f"⚠️ **Cảnh báo USD/JPY:** Khoảng cách lãi suất US-JP cực lớn ({spread_jp:.2f}%). Đồng Yên sẽ tiếp tục yếu đi so với USD cho đến khi BOJ thắt chặt chính sách.")
-            else:
-                st.info("🔵 **USD/JPY:** Chênh lệch lãi suất đang thu hẹp, đồng Yên có cơ hội hồi phục.")
+        # 5. Phân tích nhanh
+        st.info(f"💡 **Nhận định:** Chênh lệch lãi suất Mỹ - Việt Nam đang là **{(curr['USD_10Y'] - curr['VND_10Y']):.2f}%**. "
+                "Nếu con số này dương và tiếp tục tăng, tỷ giá USD/VND sẽ chịu áp lực tăng giá.")
 
     else:
-        st.warning("Đang chờ dữ liệu từ máy chủ...")
+        st.error("❌ Không thể lấy dữ liệu. Hãy nhấn F5 hoặc kiểm tra lại Sidebar.")
 
 except Exception as e:
     st.error(f"Lỗi: {e}")
