@@ -5,13 +5,12 @@ import pandas as pd
 
 # 1. Cấu hình trang web
 st.set_page_config(page_title="Gold & DXY 50Y Analysis", layout="wide")
-st.title("📊 Phân Tích Tương Quan Vàng & DXY (1976 - 2026)")
+st.title("📊 Phân Tích Vàng & DXY (1976 - 2026) kèm MA200")
 st.markdown("---")
 
 # 2. Hàm tải dữ liệu lịch sử
 @st.cache_data(ttl=3600)
 def get_macro_data():
-    # GC=F: Vàng, DX-Y.NYB: Chỉ số Đồng Đô la (DXY)
     tickers = ['GC=F', 'DX-Y.NYB']
     raw = yf.download(tickers, period="max", auto_adjust=True)
     if raw.empty: return pd.DataFrame()
@@ -21,110 +20,96 @@ def get_macro_data():
         df['Gold'] = raw['Close']['GC=F']
         df['DXY'] = raw['Close']['DX-Y.NYB']
     except:
-        # Xử lý trường hợp Multi-index của Yahoo Finance
         df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
         df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
+    
+    # Tính đường trung bình động 200 ngày (MA200) cho Vàng
+    df['MA200_Gold'] = df['Gold'].rolling(window=200).mean()
     
     return df.ffill().dropna()
 
 try:
     df = get_macro_data()
     if not df.empty:
-        # Lấy số liệu hiện tại và phiên trước
         curr = df.iloc[-1]
         prev = df.iloc[-2]
-        last_date = df.index[-1].strftime('%d/%m/%Y')
-
-        # 3. Hiển thị Metrics
-        st.write(f"Dữ liệu cập nhật ngày: **{last_date}**")
-        c1, c2 = st.columns(2)
+        
+        # 3. Metrics
+        c1, c2, c3 = st.columns(3)
         c1.metric("Giá Vàng (USD/oz)", f"${curr['Gold']:,.1f}", f"{curr['Gold'] - prev['Gold']:,.1f}")
-        c2.metric("Chỉ số DXY", f"{curr['DXY']:.2f}", f"{curr['DXY'] - prev['DXY']:.2f}")
+        c2.metric("MA200 Vàng", f"${curr['MA200_Gold']:,.1f}")
+        c3.metric("Chỉ số DXY", f"{curr['DXY']:.2f}", f"{curr['DXY'] - prev['DXY']:.2f}")
 
         # --- 🤖 4. HỆ THỐNG PHÂN TÍCH TỰ ĐỘNG ---
         st.subheader("🤖 Trạm Phân Tích Chiến Thuật")
         
-        # Tính toán biến động
-        gold_diff = curr['Gold'] - prev['Gold']
-        dxy_diff = curr['DXY'] - prev['DXY']
-        
         col_a, col_b = st.columns(2)
         with col_a:
-            if gold_diff > 0 and dxy_diff < 0:
-                st.success("✅ **Tương quan Nghịch chuẩn:** Vàng tăng khi DXY giảm. Đây là động lực tăng trưởng bền vững.")
-            elif gold_diff < 0 and dxy_diff > 0:
-                st.warning("📉 **Áp lực từ USD:** DXY đang mạnh lên, gây sức ép khiến giá Vàng điều chỉnh.")
-            elif gold_diff > 0 and dxy_diff > 0:
-                st.error("🚨 **CẢNH BÁO BẤT THƯỜNG:** Cả Vàng và USD cùng tăng. Thị trường đang cực kỳ hoảng loạn, dòng tiền tìm nơi trú ẩn an toàn tuyệt đối!")
+            # Phân tích tương quan Gold vs DXY
+            if (curr['Gold'] - prev['Gold']) > 0 and (curr['DXY'] - prev['DXY']) < 0:
+                st.success("✅ **Tương quan Nghịch chuẩn:** Vàng tăng khi DXY giảm.")
+            elif (curr['Gold'] - prev['Gold']) > 0 and (curr['DXY'] - prev['DXY']) > 0:
+                st.error("🚨 **Bất thường:** Cả Vàng và USD cùng tăng (Thị trường hoảng loạn).")
             else:
-                st.info("🔄 **Thị trường tích lũy:** Biến động nhẹ, chưa xác lập xu hướng rõ ràng.")
+                st.info("🔄 **Thị trường tĩnh:** Chưa rõ xu hướng giữa Vàng và DXY.")
 
         with col_b:
-            # Phân tích vị thế giá Vàng so với lịch sử 1 năm
-            gold_1y_high = df['Gold'].last('365D').max()
-            if curr['Gold'] >= gold_1y_high * 0.98:
-                st.error("🔥 **Vùng Đỉnh:** Giá Vàng đang giao dịch sát mức cao nhất trong vòng 1 năm qua.")
-            elif curr['Gold'] <= df['Gold'].last('365D').min() * 1.05:
-                st.success("💎 **Vùng Đáy:** Giá Vàng đang ở vùng thấp tương đối trong vòng 1 năm qua.")
+            # Phân tích xu hướng dài hạn với MA200
+            diff_ma200 = curr['Gold'] - curr['MA200_Gold']
+            percent_above = (diff_ma200 / curr['MA200_Gold']) * 100
+            
+            if curr['Gold'] > curr['MA200_Gold']:
+                st.success(f"📈 **Xu hướng Tăng (Bull):** Vàng đang nằm TRÊN MA200 khoảng {percent_above:.1f}%. Xu hướng dài hạn vẫn tích cực.")
             else:
-                st.info("📊 **Vùng Trung Dung:** Giá đang dao động ở giữa biên độ năm.")
+                st.error(f"📉 **Xu hướng Giảm (Bear):** Vàng đang nằm DƯỚI MA200. Cần thận trọng với rủi ro sụt giảm dài hạn.")
 
-        # --- 5. VẼ BIỂU ĐỒ VỚI THANH KÉO (RANGESLIDER) ---
+        # --- 5. VẼ BIỂU ĐỒ VỚI MA200 VÀ RANGESLIDER ---
         fig = go.Figure()
 
         # Đường Vàng (Trục trái)
         fig.add_trace(go.Scatter(
             x=df.index, y=df['Gold'], 
-            name="Giá Vàng (Trục Trái)", 
+            name="Giá Vàng", 
             line=dict(color='#FFD700', width=2)
+        ))
+
+        # Đường MA200 (Trục trái)
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df['MA200_Gold'], 
+            name="MA200 (Xu hướng dài hạn)", 
+            line=dict(color='#FF00FF', width=1.5, dash='dash') # Màu tím hồng đứt nét
         ))
 
         # Đường DXY (Trục phải)
         fig.add_trace(go.Scatter(
             x=df.index, y=df['DXY'], 
-            name="Chỉ số DXY (Trục Phải)", 
+            name="DXY (Trục Phải)", 
             yaxis="y2", 
-            line=dict(color='#00CCFF', width=1.5)
+            line=dict(color='#00CCFF', width=1.2)
         ))
 
-        # Cấu hình Layout, Trục kép và Thanh kéo
+        # Layout
         fig.update_layout(
-            height=700,
-            template="plotly_dark",
-            hovermode="x unified",
+            height=750, template="plotly_dark", hovermode="x unified",
             xaxis=dict(
-                rangeslider=dict(visible=True), # Thanh kéo thời gian
+                rangeslider=dict(visible=True),
                 rangeselector=dict(
                     buttons=list([
                         dict(count=1, label="1Y", step="year", stepmode="backward"),
                         dict(count=10, label="10Y", step="year", stepmode="backward"),
-                        dict(count=30, label="30Y", step="year", stepmode="backward"),
                         dict(step="all", label="MAX")
                     ])
                 ),
                 type="date"
             ),
-            yaxis=dict(
-                title=dict(text="Giá Vàng (USD/oz)", font=dict(color="#FFD700")),
-                tickfont=dict(color="#FFD700")
-            ),
-            yaxis2=dict(
-                title=dict(text="Chỉ số DXY", font=dict(color="#00CCFF")),
-                tickfont=dict(color="#00CCFF"),
-                overlaying="y",
-                side="right",
-                showgrid=False
-            ),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            yaxis=dict(title=dict(text="Giá Vàng (USD)", font=dict(color="#FFD700")), tickfont=dict(color="#FFD700")),
+            yaxis2=dict(title=dict(text="DXY", font=dict(color="#00CCFF")), tickfont=dict(color="#00CCFF"), overlaying="y", side="right", showgrid=False),
+            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 6. Bảng dữ liệu chi tiết
-        with st.expander("📥 Xem chi tiết dữ liệu lịch sử"):
-            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
-
     else:
-        st.error("⚠️ Không thể tải dữ liệu từ Yahoo Finance.")
+        st.error("⚠️ Không thể tải dữ liệu.")
 except Exception as e:
-    st.error(f"Lỗi hệ thống: {str(e)}")
+    st.error(f"Lỗi: {str(e)}")
