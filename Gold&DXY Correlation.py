@@ -6,7 +6,7 @@ import pandas as pd
 
 # 1. Cấu hình trang
 st.set_page_config(page_title="Gold Portfolio VND", layout="wide")
-st.title("🧠 Quản Lý Danh Mục Vàng & Vĩ Mô (USD/VND)")
+st.title("🧠 Quản Lý Danh Mục Vàng & Vĩ Mô (VNĐ)")
 
 @st.cache_data(ttl=3600)
 def get_data():
@@ -58,7 +58,37 @@ try:
         st.metric("Tỷ giá USD/VND", f"{rate:,.0f}đ")
         st.metric("Tổng giá trị (VNĐ)", f"{total_value_vnd:,.0f}đ")
         st.metric("Lời / Lỗ", f"{profit_vnd:,.0f}đ", f"{pnl_pct:.2f}%")
-        st.caption(f"Tương đương: ${profit_usd:,.2f}")
 
     # --- PHẦN 2: BIỂU ĐỒ TỔNG HỢP ---
-    fig = make_subplots(rows=2, cols=
+    # SỬA LỖI TẠI ĐÂY: Đảm bảo đóng đủ ngoặc và tham số
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.08, 
+        row_heights=[0.7, 0.3],
+        specs=[[{"secondary_y": True}], [{}]]
+    )
+
+    # Hàng 1: Vàng & DXY
+    fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng (USD)", line=dict(color='#FFD700')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['MA200'], name="MA200", line=dict(color='#FF00FF', dash='dash')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=df.index, y=df['DXY'], name="DXY", line=dict(color='#00CCFF', width=1)), row=1, col=1, secondary_y=True)
+
+    # Hàng 2: RSI
+    fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=dict(color='white')), row=2, col=1)
+    fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
+    fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+
+    # Thanh kéo thời gian & Layout
+    fig.update_layout(
+        height=700, template="plotly_dark", hovermode="x unified",
+        xaxis2_rangeslider_visible=True, 
+        xaxis2_rangeslider_thickness=0.04,
+        legend=dict(orientation="h", y=1.08, x=0.5, xanchor="center")
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- PHẦN 3: NHẬT KÝ GIAO DỊCH ---
+    st.divider()
+    st.subheader("📝 Nhật ký & Ghi chú chiến lược")
+    note = st.text_area("Nhập kế hoạch giao dịch của bạn tại
