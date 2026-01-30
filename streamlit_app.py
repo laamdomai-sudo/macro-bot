@@ -122,3 +122,82 @@ try:
 
 except Exception as e:
     st.error(f"Lỗi hệ thống: {e}")
+
+import streamlit as st
+import yfinance as yf
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import pandas as pd
+
+st.set_page_config(page_title="Macro Full Dashboard", layout="wide")
+st.title("📊 Dashboard Tài Chính & Lãi Suất Toàn Cầu")
+
+@st.cache_data(ttl=3600)
+def get_full_data():
+    # Tickers: Vàng, Bạc, DXY, LS Mỹ 10Y (^TNX), LS Nhật 10Y (^JGBSY)
+    tickers = ['GC=F', 'SI=F', 'DX-Y.NYB', '^TNX', '^JGBSY']
+    raw = yf.download(tickers, period="2y", auto_adjust=True)
+    
+    df = pd.DataFrame(index=raw.index)
+    try:
+        df['Gold'] = raw['Close']['GC=F']
+        df['Silver'] = raw['Close']['SI=F']
+        df['DXY'] = raw['Close']['DX-Y.NYB']
+        df['US_10Y'] = raw['Close']['^TNX']
+        df['JPY_10Y'] = raw['Close']['^JGBSY']
+    except:
+        # Dự phòng Multi-index
+        df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
+        df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
+        df['US_10Y'] = raw.xs('^TNX', axis=1, level=1)['Close']
+        df['JPY_10Y'] = raw.xs('^JGBSY', axis=1, level=1)['Close']
+    
+    return df.dropna(subset=['Gold', 'DXY']) # Đảm bảo có dữ liệu chính
+
+try:
+    df = get_full_data()
+    if not df.empty:
+        # Tính toán các chỉ số
+        last_gold = df['Gold'].iloc[-1]
+        last_dxy = df['DXY'].iloc[-1]
+        last_us10y = df['US_10Y'].iloc[-1]
+        last_jpy10y = df['JPY_10Y'].iloc[-1]
+
+        # 3. Hiển thị Metrics
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Vàng", f"${last_gold:,.1f}")
+        m2.metric("DXY", f"{last_dxy:.2f}")
+        m3.metric("LS Mỹ 10Y", f"{last_us10y:.2f}%")
+        m4.metric("LS Nhật 10Y", f"{last_jpy10y:.3f}%")
+
+        # 4. Phân tích lãi suất tự động
+        st.subheader("🤖 Phân Tích Chênh Lệch Lãi Suất (Yield Spread)")
+        spread = last_us10y - last_jpy10y
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            if spread > 3:
+                st.warning(f"Chênh lệch LS Mỹ-Nhật rất lớn ({spread:.2f}%). Điều này gây áp lực giảm giá cực mạnh lên đồng Yên (JPY) và hỗ trợ DXY.")
+            else:
+                st.info(f"Chênh lệch LS Mỹ-Nhật đang ở mức {spread:.2f}%.")
+        
+        with c2:
+            st.markdown("""
+            **Ghi chú VND:** Lãi suất Việt Nam (VND) hiện không có Ticker trực tiếp trên Yahoo. 
+            Tuy nhiên, khi LS Mỹ (US10Y) tăng cao, áp lực tỷ giá lên VND sẽ tăng, buộc Ngân hàng Nhà nước phải hút tiền về hoặc tăng lãi suất để giữ giá đồng tiền.
+            """)
+
+        # 5. Biểu đồ đa tầng
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                            subplot_titles=("Giá Vàng", "Chỉ số DXY", "Lợi suất Trái phiếu (Lãi suất thị trường)"))
+        
+        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'], name="DXY", line=dict(color='#00CCFF')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['US_10Y'], name="LS Mỹ 10Y (%)", line=dict(color='#FF4B4B')), row=3, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="LS Nhật 10Y (%)", line=dict(color='#00FF00')), row=3, col=1)
+
+        fig.update_layout(height=900, template="plotly_dark")
+        st.plotly_chart(fig, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Lỗi: {e}")
