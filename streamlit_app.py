@@ -5,98 +5,67 @@ from plotly.subplots import make_subplots
 import pandas as pd
 
 # 1. Cấu hình trang web
-st.set_page_config(page_title="Macro Gold Dashboard", layout="wide")
-st.title("📊 Hệ Thống Giám Sát Tài Chính Toàn Cầu")
+st.set_page_config(page_title="Macro AI Dashboard", layout="wide")
+st.title("📊 Hệ Thống Giám Sát & Phân Tích Tài Chính Tự Động")
 st.markdown("---")
 
-# 2. Hàm tải và xử lý dữ liệu (Đã sửa lỗi lệch cột)
+# 2. Hàm tải và xử lý dữ liệu chuẩn
 @st.cache_data(ttl=3600)
 def get_data():
-    # Danh sách mã: Vàng, Bạc, Chỉ số DXY
     tickers = ['GC=F', 'SI=F', 'DX-Y.NYB']
-    
-    # Tải dữ liệu 2 năm gần nhất
     raw = yf.download(tickers, period="2y", auto_adjust=True)
-    
-    if raw.empty:
-        return pd.DataFrame()
+    if raw.empty: return pd.DataFrame()
 
-    # Tạo DataFrame mới và bóc tách từng mã để tránh lệch cột
     df = pd.DataFrame(index=raw.index)
-    
-    # Bóc tách chính xác từng cột Close (Đóng cửa)
     try:
         df['Gold'] = raw['Close']['GC=F']
         df['Silver'] = raw['Close']['SI=F']
         df['DXY'] = raw['Close']['DX-Y.NYB']
     except:
-        # Cách dự phòng nếu cấu hình Yahoo Finance thay đổi
         df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
         df['Silver'] = raw.xs('SI=F', axis=1, level=1)['Close']
         df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
-
+    
     return df.dropna()
 
 try:
     df = get_data()
-
     if not df.empty:
-        # Tính toán tỷ lệ Vàng/Bạc
         df['Ratio'] = df['Gold'] / df['Silver']
         
-        # Lấy giá trị mới nhất
-        last_gold = df['Gold'].iloc[-1]
-        last_silver = df['Silver'].iloc[-1]
-        last_dxy = df['DXY'].iloc[-1]
+        # Lấy giá trị hiện tại và phiên trước
+        last_gold, prev_gold = df['Gold'].iloc[-1], df['Gold'].iloc[-2]
+        last_silver, prev_silver = df['Silver'].iloc[-1], df['Silver'].iloc[-2]
+        last_dxy, prev_dxy = df['DXY'].iloc[-1], df['DXY'].iloc[-2]
         last_ratio = df['Ratio'].iloc[-1]
         last_date = df.index[-1].strftime('%d/%m/%Y')
 
-        st.write(f"Dữ liệu cập nhật ngày: **{last_date}**")
-
-        # 3. Hiển thị các chỉ số chính (Metrics)
+        # 3. Hiển thị các chỉ số chính
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Vàng (USD/oz)", f"${last_gold:,.2f}")
-        c2.metric("Bạc (USD/oz)", f"${last_silver:,.2f}")
-        c3.metric("Chỉ số DXY", f"{last_dxy:.2f}")
+        c1.metric("Vàng (USD/oz)", f"${last_gold:,.2f}", f"{last_gold - prev_gold:,.2f}")
+        c2.metric("Bạc (USD/oz)", f"${last_silver:,.2f}", f"{last_silver - prev_silver:,.2f}")
+        c3.metric("Chỉ số DXY", f"{last_dxy:.2f}", f"{last_dxy - prev_dxy:.2f}")
         c4.metric("Tỷ lệ Vàng/Bạc", f"{last_ratio:.1f}")
 
-        # 4. Vẽ biểu đồ chuyên sâu
-        fig = make_subplots(
-            rows=2, cols=1, 
-            shared_xaxes=True, 
-            vertical_spacing=0.07,
-            subplot_titles=("Xu hướng Vàng & Bạc", "Sức mạnh đồng USD (DXY)"),
-            row_width=[0.4, 0.6]
-        )
+        # --- 🤖 PHẦN MỚI: TỰ ĐỘNG PHÂN TÍCH ---
+        st.subheader("🤖 Trạm Phân Tích Thông Minh")
+        col_a, col_b = st.columns(2)
 
-        # Biểu đồ Vàng & Bạc (Tầng 1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700', width=2)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df['Silver'], name="Bạc", line=dict(color='#C0C0C0', width=1.5)), row=1, col=1)
+        with col_a:
+            # Logic phân tích Ratio
+            if last_ratio > 80:
+                st.info(f"🚩 **Tỷ lệ ({last_ratio:.1f}):** Vàng đang quá đắt so với Bạc. Lịch sử ủng hộ việc tích lũy **Bạc**.")
+            elif last_ratio < 50:
+                st.warning(f"🚩 **Tỷ lệ ({last_ratio:.1f}):** Bạc đang cực kỳ nóng. Cẩn thận nhịp điều chỉnh, **Vàng** hiện an toàn hơn.")
+            else:
+                st.success(f"🚩 **Tỷ lệ ({last_ratio:.1f}):** Tương quan Vàng/Bạc ở mức cân bằng.")
 
-        # Biểu đồ DXY (Tầng 2)
-        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'], name="DXY", fill='tozeroy', line=dict(color='#00CCFF')), row=2, col=1)
+        with col_b:
+            # Logic phân tích tương quan Gold vs DXY
+            gold_up = last_gold > prev_gold
+            dxy_up = last_dxy > prev_dxy
 
-        # Tinh chỉnh giao diện biểu đồ
-        fig.update_layout(
-            height=800, 
-            template="plotly_dark", 
-            hovermode="x unified",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # 5. Khu vực bảng dữ liệu và tải về
-        with st.expander("Xem chi tiết bảng số liệu"):
-            # Sắp xếp ngày mới nhất lên đầu
-            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
-            st.download_button(
-                label="📥 Tải dữ liệu CSV về máy",
-                data=df.to_csv(),
-                file_name=f"macro_data_{last_date}.csv",
-                mime="text/csv"
-            )
-    else:
-        st.error("Không thể tải dữ liệu. Hãy thử nhấn 'Reboot App' trong mục Manage App.")
-
-except Exception as e:
-    st.error(f"Đã xảy ra lỗi hệ thống: {e}")
+            if gold_up and not dxy_up:
+                st.success("📈 **Xu hướng:** Vàng tăng do DXY giảm. Đây là biến động thuận chiều vĩ mô điển hình.")
+            elif gold_up and dxy_up:
+                st.error("⚠️ **Cảnh báo:** Cả Vàng và DXY cùng tăng. Thị trường đang cực kỳ hoảng loạn
