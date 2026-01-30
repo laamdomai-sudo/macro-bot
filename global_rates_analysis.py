@@ -4,8 +4,8 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 # 1. Cấu hình trang
-st.set_page_config(page_title="Global Macro Pro", layout="wide")
-st.title("🌍 Dashboard Lãi Suất Toàn Cầu: 2Y vs 10Y")
+st.set_page_config(page_title="Global Macro History", layout="wide")
+st.title("🌍 Dashboard Lãi Suất Toàn Cầu: Tầm nhìn 50 Năm")
 
 # Hàm tải dữ liệu an toàn
 @st.cache_data(ttl=3600)
@@ -17,7 +17,7 @@ def fetch_fred_csv(series_id):
     except:
         return pd.DataFrame()
 
-# 2. Định nghĩa danh mục mã lãi suất (Cả 2Y và 10Y)
+# 2. Định nghĩa danh mục mã lãi suất
 mapping = {
     "10 Năm (Dài hạn)": {
         "USD (Mỹ)": "DGS10",
@@ -38,10 +38,18 @@ mapping = {
 # --- SIDEBAR ---
 st.sidebar.header("⚙️ Cấu hình hệ thống")
 term_choice = st.sidebar.radio("Chọn kỳ hạn lãi suất:", list(mapping.keys()))
+
+# MỚI: Chọn khoảng thời gian quan sát
+time_period = st.sidebar.select_slider(
+    "Khoảng thời gian hiển thị:",
+    options=["1Y", "5Y", "10Y", "20Y", "30Y", "50Y"],
+    value="10Y"
+)
+
 current_symbols = mapping[term_choice]
 
 try:
-    with st.spinner(f'📡 Đang tải lãi suất {term_choice}...'):
+    with st.spinner(f'📡 Đang tải dữ liệu {term_choice} trong {time_period}...'):
         data_frames = []
         for name, sid in current_symbols.items():
             df_temp = fetch_fred_csv(sid)
@@ -50,7 +58,8 @@ try:
                 data_frames.append(df_temp)
         
         if data_frames:
-            df_final = pd.concat(data_frames, axis=1).ffill().dropna().last('3Y')
+            # Gộp dữ liệu và lọc theo khoảng thời gian đã chọn
+            df_final = pd.concat(data_frames, axis=1).ffill().dropna().last(time_period)
         else:
             df_final = pd.DataFrame()
 
@@ -69,14 +78,14 @@ try:
         target_cur = st.sidebar.selectbox("Đồng tiền B:", options=available_cols, index=min(2, len(available_cols)-1))
 
         # --- SECTION 1: BIỂU ĐỒ CHÍNH ---
-        st.subheader(f"📊 Diễn biến Lãi suất {term_choice}")
+        st.subheader(f"📊 Diễn biến Lãi suất {term_choice} ({time_period})")
         if selected_currencies:
             fig = go.Figure()
             for col in selected_currencies:
-                fig.add_trace(go.Scatter(x=df_final.index, y=df_final[col], name=col, line=dict(width=2)))
+                fig.add_trace(go.Scatter(x=df_final.index, y=df_final[col], name=col, line=dict(width=1.5)))
             
             fig.update_layout(
-                height=500, template="plotly_dark", hovermode="x unified",
+                height=600, template="plotly_dark", hovermode="x unified",
                 yaxis=dict(title="Lãi suất (%)", gridcolor='rgba(255,255,255,0.1)'),
                 xaxis=dict(rangeslider=dict(visible=True)),
                 legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
@@ -95,20 +104,21 @@ try:
             with c2:
                 fig_spread = go.Figure()
                 fig_spread.add_trace(go.Scatter(x=spread_data.index, y=spread_data, fill='tozeroy', name="Spread", line=dict(color='#00FFCC')))
-                fig_spread.update_layout(height=300, template="plotly_dark", margin=dict(t=10, b=10))
+                fig_spread.update_layout(height=350, template="plotly_dark", margin=dict(t=10, b=10))
                 st.plotly_chart(fig_spread, use_container_width=True)
             
-            # --- KIẾN THỨC VĨ MÔ ---
-            with st.expander("💡 Tại sao cần so sánh 2Y và 10Y?"):
-                st.write("""
-                * **Lãi suất 2 năm:** Phản ánh kỳ vọng về việc tăng/giảm lãi suất của Ngân hàng Trung ương trong tương lai gần.
-                * **Lãi suất 10 năm:** Phản ánh sức khỏe kinh tế dài hạn. 
-                * **Mẹo đầu tư:** Nếu lãi suất 2Y của một nước tăng nhanh hơn 10Y (Đường cong phẳng lại), đó thường là tín hiệu sắp có suy thoái hoặc thắt chặt tiền tệ cực mạnh.
+            # --- PHÂN TÍCH LỊCH SỬ ---
+            with st.expander("📖 Tầm quan trọng của dữ liệu 50 năm"):
+                st.write(f"""
+                Khi nhìn vào dữ liệu 50 năm (từ 1976-2026), bạn sẽ thấy các chu kỳ kinh tế lớn:
+                * **Thập kỷ 1980:** Thời kỳ lãi suất Mỹ đạt đỉnh lịch sử (trên 15%) để chống lạm phát.
+                * **Giai đoạn 2008-2021:** Kỷ nguyên lãi suất siêu thấp (Zero Interest Rate Policy).
+                * **Hiện tại (2022-2026):** Sự quay trở lại của lạm phát và chu kỳ tăng lãi suất mới.
                 """)
         else:
             st.info("Vui lòng chọn đồng tiền hiển thị ở thanh bên.")
     else:
-        st.error("Không có dữ liệu. Hãy thử kiểm tra lại kết nối internet.")
+        st.error("Dữ liệu không khả dụng cho khoảng thời gian này.")
 
 except Exception as e:
     st.error(f"Lỗi: {e}")
