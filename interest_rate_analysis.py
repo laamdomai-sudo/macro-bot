@@ -5,97 +5,90 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
 # 1. Cấu hình trang
-st.set_page_config(page_title="USD vs JPY Analysis", layout="wide")
-st.title("🏦 Phân Tích Tương Quan Lãi Suất USD - JPY")
-st.markdown("---")
+st.set_page_config(page_title="USD vs JPY Macro", layout="wide")
+st.title("🏦 Phân Tích Vĩ Mô: Lãi Suất & Lạm Phát USD - JPY")
 
 @st.cache_data(ttl=3600)
-def get_fred_data():
+def get_macro_data():
     end = datetime.now()
-    start = end - timedelta(days=365 * 2) # Lấy dữ liệu 2 năm gần nhất
+    start = end - timedelta(days=365 * 5) # Lấy 5 năm để thấy rõ chu kỳ
     
-    # DGS10: Lợi suất 10 năm Mỹ (USD)
-    # JPNCB10Y: Lợi suất 10 năm Nhật (JPY) - Nguồn từ FRED
-    # DEXJPUS: Tỷ giá USD/JPY
+    # DGS10: Lãi suất 10Y Mỹ, IRLTLT01JPM156N: 10Y Nhật
+    # DEXJPUS: Tỷ giá USD/JPY, CPIAUCSL: Lạm phát Mỹ
     symbols = {
         'DGS10': 'USD_10Y',
         'IRLTLT01JPM156N': 'JPY_10Y',
-        'DEXJPUS': 'USDJPY'
+        'DEXJPUS': 'USDJPY',
+        'CPIAUCSL': 'US_CPI'
     }
     
     try:
         df = web.DataReader(list(symbols.keys()), 'fred', start, end)
         df.rename(columns=symbols, inplace=True)
+        # Tính lạm phát theo năm (%) từ chỉ số CPI
+        df['US_Inflation'] = df['US_CPI'].pct_change(periods=12) * 100
         return df.ffill().dropna()
     except Exception as e:
-        st.error(f"Lỗi kết nối máy chủ FRED: {e}")
+        st.error(f"Lỗi kết nối FRED: {e}")
         return pd.DataFrame()
 
 try:
-    with st.spinner('📡 Đang kết nối máy chủ FRED (St. Louis Fed)...'):
-        df = get_fred_data()
+    with st.spinner('📡 Đang tải dữ liệu từ FRED (St. Louis Fed)...'):
+        df = get_macro_data()
 
     if not df.empty:
-        # Tính toán chênh lệch lãi suất (Spread)
-        df['Spread'] = df['USD_10Y'] - df['JPY_10Y']
-        
         curr = df.iloc[-1]
         prev = df.iloc[-2]
 
-        # 2. Hiển thị Metrics chính
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Lãi suất Mỹ (US10Y)", f"{curr['USD_10Y']:.2f}%", f"{curr['USD_10Y'] - prev['USD_10Y']:.2f}%")
-        c2.metric("Lãi suất Nhật (JP10Y)", f"{curr['JPY_10Y']:.3f}%", f"{curr['JPY_10Y'] - prev['JPY_10Y']:.3f}%")
-        c3.metric("Tỷ giá USD/JPY", f"{curr['USDJPY']:.2f}", f"{curr['USDJPY'] - prev['USDJPY']:.2f}")
+        # 2. Metrics Vĩ Mô
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("USD 10Y Yield", f"{curr['USD_10Y']:.2f}%", f"{curr['USD_10Y'] - prev['USD_10Y']:.2f}%")
+        c2.metric("JPY 10Y Yield", f"{curr['JPY_10Y']:.3f}%")
+        c3.metric("Lạm phát Mỹ (CPI)", f"{curr['US_Inflation']:.1f}%")
+        c4.metric("Tỷ giá USD/JPY", f"{curr['USDJPY']:.2f}")
 
-        # --- 🤖 3. HỆ THỐNG PHÂN TÍCH TỰ ĐỘNG ---
-        st.subheader("🤖 Phân Tích Tương Quan Liên Thị Trường")
-        col_text, col_spread = st.columns([1, 1.5])
+        # --- 🤖 3. HỆ THỐNG DỰ BÁO LÃI SUẤT ---
+        st.subheader("🔮 Phân Tích & Dự Báo Chính Sách")
+        col_a, col_b = st.columns(2)
         
-        with col_text:
-            spread_val = curr['Spread']
-            st.markdown(f"#### Chênh lệch lãi suất: `{spread_val:.2f}%`")
-            
-            if spread_val > 3.5:
-                st.error("🚨 **Carry Trade cực thịnh:** Khoảng cách lãi suất rất lớn. Nhà đầu tư có xu hướng vay JPY để mua USD, khiến đồng Yên chịu áp lực giảm giá nặng nề.")
-            elif spread_val < 2.5:
-                st.success("🟢 **Thu hẹp khoảng cách:** Áp lực lên đồng Yên đang giảm bớt. Đây là tín hiệu JPY có thể hồi phục mạnh mẽ.")
+        with col_a:
+            st.markdown("#### 🎯 Áp lực lên FED (Mỹ)")
+            inf_val = curr['US_Inflation']
+            if inf_val > 3.0:
+                st.error(f"⚠️ **Lạm phát cao ({inf_val:.1f}%):** FED khó có thể giảm lãi suất sớm. USD sẽ tiếp tục duy trì sức mạnh.")
+            elif inf_val < 2.5:
+                st.success(f"✅ **Lạm phát hạ nhiệt ({inf_val:.1f}%):** Mở đường cho chu kỳ giảm lãi suất. USD có thể suy yếu.")
             else:
-                st.info("🔄 **Trạng thái cân bằng:** Chênh lệch đang duy trì ở mức trung bình.")
-            
-            st.caption("Lưu ý: Khi đường Spread (Vùng xanh dưới biểu đồ) đi lên, tỷ giá USD/JPY thường tăng theo.")
+                st.info("🔄 **Vùng ổn định:** FED sẽ duy trì trạng thái quan sát.")
 
-        with col_spread:
-            # Biểu đồ vùng cho Spread
-            fig_s = go.Figure()
-            fig_s.add_trace(go.Scatter(x=df.index, y=df['Spread'], fill='tozeroy', name="Chênh lệch (Spread)", line=dict(color='#00FFCC')))
-            fig_s.update_layout(height=250, template="plotly_dark", margin=dict(t=0, b=0), showlegend=False, 
-                                title="Lịch sử Chênh lệch Lãi suất (US - JP)")
-            st.plotly_chart(fig_s, use_container_width=True)
+        with col_b:
+            st.markdown("#### 💴 Áp lực lên BOJ (Nhật Bản)")
+            spread = curr['USD_10Y'] - curr['JPY_10Y']
+            if spread > 4.0:
+                st.error(f"🚨 **Carry Trade Quá Nhiệt:** Chênh lệch lãi suất {spread:.2f}% là cực lớn. JPY sẽ bị bán tháo mạnh.")
+            else:
+                st.success(f"🟢 **Áp lực giảm:** Chênh lệch {spread:.2f}% đang thu hẹp, hỗ trợ JPY hồi phục.")
 
-        # --- 4. BIỂU ĐỒ TƯƠNG QUAN CHÍNH ---
-        st.subheader("📈 So sánh Lãi suất & Tỷ giá thực tế")
+        # --- 4. BIỂU ĐỒ TỔNG HỢP ---
+        st.subheader("📈 Biểu đồ Tương quan Lãi suất & Lạm phát")
         fig = go.Figure()
         
-        # Lãi suất (Trục trái)
-        fig.add_trace(go.Scatter(x=df.index, y=df['USD_10Y'], name="Lãi suất USD (10Y)", line=dict(color='#FF4B4B', width=2.5)))
-        fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="Lãi suất JPY (10Y)", line=dict(color='#1E88E5', width=2)))
+        # Đường Lãi suất & Lạm phát
+        fig.add_trace(go.Scatter(x=df.index, y=df['USD_10Y'], name="Lãi suất Mỹ", line=dict(color='#FF4B4B', width=2)))
+        fig.add_trace(go.Scatter(x=df.index, y=df['US_Inflation'], name="Lạm phát Mỹ (CPI)", line=dict(color='#00FF00', dash='dot')))
+        fig.add_trace(go.Scatter(x=df.index, y=df['JPY_10Y'], name="Lãi suất Nhật", line=dict(color='#1E88E5')))
         
         # Tỷ giá (Trục phải)
-        fig.add_trace(go.Scatter(x=df.index, y=df['USDJPY'], name="Tỷ giá USD/JPY (Trục phải)", 
-                                 yaxis="y2", line=dict(color='#FFFFFF', width=1.5, dash='dot')))
+        fig.add_trace(go.Scatter(x=df.index, y=df['USDJPY'], name="USD/JPY (Phải)", yaxis="y2", line=dict(color='white', width=1, opacity=0.5)))
 
         fig.update_layout(
             height=600, template="plotly_dark", hovermode="x unified",
-            yaxis=dict(title="Lãi suất (%)", tickformat=".2f"),
-            yaxis2=dict(title="USD/JPY Price", overlaying="y", side="right", showgrid=False),
+            yaxis=dict(title="Lãi suất / Lạm phát (%)"),
+            yaxis2=dict(overlaying="y", side="right", showgrid=False, title="USD/JPY Price"),
             legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"),
             xaxis=dict(rangeslider=dict(visible=True))
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    else:
-        st.error("❌ Không thể lấy dữ liệu từ FRED. Hãy kiểm tra lại kết nối internet.")
-
 except Exception as e:
-    st.error(f"Lỗi hệ thống: {e}")
+    st.error(f"Lỗi: {e}")
