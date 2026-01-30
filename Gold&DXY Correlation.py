@@ -6,7 +6,7 @@ import numpy as np
 
 # 1. Cấu hình
 st.set_page_config(page_title="Macro AI & Portfolio", layout="wide")
-st.title("🧠 Hệ Thống Dự Báo Định Lượng & Quản Lý Danh Mục")
+st.title("Dashboard Phân Tích Giá Vàng & DXY")
 
 @st.cache_data(ttl=3600)
 def get_advanced_data():
