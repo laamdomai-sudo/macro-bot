@@ -10,8 +10,11 @@ st.title("🧠 Hệ Thống Dự Báo Định Lượng & Quản Lý Danh Mục")
 
 @st.cache_data(ttl=3600)
 def get_advanced_data():
+    # Tải dữ liệu
     raw = yf.download(['GC=F', 'DX-Y.NYB'], period="max", auto_adjust=True)
     df = pd.DataFrame(index=raw.index)
+    
+    # Xử lý MultiIndex của yfinance (phiên bản mới)
     try:
         df['Gold'] = raw['Close']['GC=F']
         df['DXY'] = raw['Close']['DX-Y.NYB']
@@ -28,6 +31,10 @@ def get_advanced_data():
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # --- MỚI: Tính Tương quan (Correlation) trong 30 phiên ---
+    # Giá trị từ -1 (Nghịch đảo hoàn toàn) đến 1 (Đồng pha hoàn toàn)
+    df['Correlation'] = df['Gold'].rolling(window=30).corr(df['DXY'])
     
     # Biến động sau 10 phiên cho Backtest
     df['Return_10d'] = df['Gold'].shift(-10) / df['Gold'] - 1
@@ -71,9 +78,15 @@ try:
         st.write("Vùng an toàn" if abs(dist) < 12 else "⚠️ Cẩn thận đảo chiều")
 
     with c3:
-        dxy_trend = df['DXY'].iloc[-1] - df['DXY'].iloc[-10]
-        st.markdown("**Xu Hướng USD (DXY)**")
-        st.write("📈 USD đang mạnh (Cản Vàng)" if dxy_trend > 0 else "📉 USD suy yếu (Đẩy Vàng)")
+        # Lấy giá trị tương quan mới nhất
+        curr_corr = df['Correlation'].iloc[-1]
+        st.markdown(f"**Tương quan Vàng/DXY: {curr_corr:.2f}**")
+        if curr_corr < -0.5:
+            st.write("✅ Nghịch đảo chuẩn (DXY tăng -> Vàng giảm)")
+        elif curr_corr > 0.5:
+            st.write("⚠️ Bất thường (Cùng tăng/giảm)")
+        else:
+            st.write("⚖️ Không rõ ràng")
 
     # --- SECTION 3: BIỂU ĐỒ TỔNG HỢP ---
     fig = go.Figure()
@@ -85,14 +98,45 @@ try:
     fig.add_hline(y=entry_price, line_dash="dot", line_color="white", annotation_text="Giá vốn của bạn")
 
     fig.update_layout(
-        height=550, template="plotly_dark", hovermode="x unified",
+        height=500, template="plotly_dark", hovermode="x unified",
         xaxis=dict(rangeslider=dict(visible=True)),
         yaxis2=dict(overlaying="y", side="right", showgrid=False),
-        legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
+        legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"),
+        margin=dict(l=0, r=0, t=30, b=0)
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- SECTION 4: KẾT QUẢ BACKTEST ---
+    # --- SECTION 4: BẢNG DỮ LIỆU CHI TIẾT (MỚI) ---
+    st.divider()
+    st.subheader("📋 Dữ Liệu Chi Tiết & Tương Quan (Gold vs DXY)")
+    
+    with st.expander("Xem bảng dữ liệu chi tiết", expanded=True):
+        # Chuẩn bị dữ liệu hiển thị, đảo ngược để xem ngày mới nhất trước
+        display_df = df[['Gold', 'DXY', 'RSI', 'Correlation']].sort_index(ascending=False)
+        
+        # Sử dụng column_config để hiển thị đẹp hơn
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            height=400,
+            column_config={
+                "Gold": st.column_config.NumberColumn(
+                    "Giá Vàng ($)", format="$%.2f"
+                ),
+                "DXY": st.column_config.NumberColumn(
+                    "DXY Index", format="%.2f"
+                ),
+                "RSI": st.column_config.ProgressColumn(
+                    "RSI (Sức mạnh)", format="%.1f", min_value=0, max_value=100
+                ),
+                "Correlation": st.column_config.NumberColumn(
+                    "Tương quan (30p)", format="%.2f"
+                )
+            }
+        )
+        st.caption("*Tương quan (Correlation): Gần -1 là ngược chiều nhau, gần 1 là cùng chiều.*")
+
+    # --- SECTION 5: KẾT QUẢ BACKTEST ---
     with st.expander("📊 Xem Dữ Liệu Kiểm Chứng RSI (50 Năm)"):
         overbought_events = df[df['RSI'] > 70].copy()
         win_rate = (overbought_events['Return_10d'] < 0).sum() / len(overbought_events) * 100
@@ -104,4 +148,4 @@ try:
         b3.metric("Biến động TB", f"{avg_ret:.2f}%")
 
 except Exception as e:
-    st.error(f"Lỗi: {str(e)}")
+    st.error(f"Lỗi hệ thống hoặc đường truyền dữ liệu: {str(e)}")
