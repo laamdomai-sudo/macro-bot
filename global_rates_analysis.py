@@ -3,10 +3,11 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-# 1. Cấu hình trang chuyên sâu
-st.set_page_config(page_title="Intelligent Macro Hub", layout="wide")
-st.title("🧠 Hệ Thống Phân Tích Vĩ Mô Thông Minh")
+# 1. Cấu hình trang
+st.set_page_config(page_title="Global Macro Pro", layout="wide")
+st.title("🌍 Dashboard Lãi Suất Toàn Cầu: 2Y vs 10Y")
 
+# Hàm tải dữ liệu an toàn
 @st.cache_data(ttl=3600)
 def fetch_fred_csv(series_id):
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
@@ -16,88 +17,98 @@ def fetch_fred_csv(series_id):
     except:
         return pd.DataFrame()
 
+# 2. Định nghĩa danh mục mã lãi suất (Cả 2Y và 10Y)
+mapping = {
+    "10 Năm (Dài hạn)": {
+        "USD (Mỹ)": "DGS10",
+        "EUR (Châu Âu)": "IRLTLT01EZM156N",
+        "JPY (Nhật Bản)": "IRLTLT01JPM156N",
+        "GBP (Anh)": "IRLTLT01GBM156N",
+        "CNY (Trung Quốc)": "CHNYLD10Y"
+    },
+    "2 Năm (Ngắn hạn)": {
+        "USD (Mỹ)": "DGS2",
+        "EUR (Châu Âu)": "IRT3TR01EZM156N",
+        "JPY (Nhật Bản)": "IR3TIB01JPM156N",
+        "GBP (Anh)": "IRT3TR01GBM156N",
+        "CNY (Trung Quốc)": "CHNRYLD2Y"
+    }
+}
+
+# --- SIDEBAR ---
+st.sidebar.header("⚙️ Cấu hình hệ thống")
+term_choice = st.sidebar.radio("Chọn kỳ hạn lãi suất:", list(mapping.keys()))
+current_symbols = mapping[term_choice]
+
 try:
-    with st.spinner('🤖 Thuật toán đang quét dữ liệu thị trường...'):
-        # Tải dữ liệu chính (Mỹ là đại diện dòng tiền thế giới)
-        us_2y = fetch_fred_csv("DGS2")
-        us_10y = fetch_fred_csv("DGS10")
-        vix = fetch_fred_csv("VIXCLS") # Chỉ số đo lường trạng thái sợ hãi
+    with st.spinner(f'📡 Đang tải lãi suất {term_choice}...'):
+        data_frames = []
+        for name, sid in current_symbols.items():
+            df_temp = fetch_fred_csv(sid)
+            if not df_temp.empty:
+                df_temp.columns = [name]
+                data_frames.append(df_temp)
         
-        # Kết hợp dữ liệu
-        df = pd.concat([us_2y, us_10y, vix], axis=1).ffill().dropna().last('3Y')
-        df.columns = ['US2Y', 'US10Y', 'VIX']
-        df['Gap'] = df['US10Y'] - df['US2Y']
+        if data_frames:
+            df_final = pd.concat(data_frames, axis=1).ffill().dropna().last('3Y')
+        else:
+            df_final = pd.DataFrame()
 
-    if not df.empty:
-        curr = df.iloc[-1]
-        
-        # --- THUẬT TOÁN CHẤM ĐIỂM RỦI RO (MACRO RISK SCORE) ---
-        risk_score = 0
-        reasons = []
-        
-        # Kiểm tra Đảo ngược
-        if curr['Gap'] < 0:
-            risk_score += 40
-            reasons.append("🚩 Đường cong lợi suất Đảo ngược (Cảnh báo suy thoái)")
-        
-        # Kiểm tra VIX (Sợ hãi)
-        if curr['VIX'] > 30:
-            risk_score += 40
-            reasons.append("🚩 VIX trên 30: Thị trường đang hoảng loạn cực độ")
-        elif curr['VIX'] > 20:
-            risk_score += 20
-            reasons.append("⚠️ VIX trên 20: Tâm lý bất an đang gia tăng")
-            
-        # Kiểm tra xu hướng ngắn hạn
-        if curr['US2Y'] > df['US2Y'].iloc[-20]:
-            risk_score += 20
-            reasons.append("⚠️ Lãi suất ngắn hạn đang tăng: Áp lực thắt chặt tiền tệ")
-
-        # --- HIỂN THỊ ĐIỂM RỦI RO ---
-        st.subheader("📊 Đánh giá rủi ro hệ thống")
-        c1, c2 = st.columns([1, 2])
-        
-        with c1:
-            st.metric("Macro Risk Score", f"{risk_score}/100")
-            if risk_score >= 60:
-                st.error("CHẾ ĐỘ: PHÒNG THỦ CỰC ĐỘ")
-            elif risk_score >= 30:
-                st.warning("CHẾ ĐỘ: THẬN TRỌNG")
-            else:
-                st.success("CHẾ ĐỘ: TĂNG TRƯỞNG")
-        
-        with c2:
-            st.write("**Các yếu tố ảnh hưởng hiện tại:**")
-            for r in reasons:
-                st.write(r)
-
-        # --- BIỂU ĐỒ TƯƠNG QUAN THÔNG MINH ---
-        st.divider()
-        st.subheader("📈 Biểu đồ Tương quan: Lãi suất vs Tâm lý Sợ hãi")
-        
-        fig = go.Figure()
-        
-        # Vẽ vùng Đảo ngược
-        fig.add_trace(go.Scatter(x=df.index, y=df['Gap'], name="10Y-2Y Spread", fill='tozeroy', line=dict(color='#00FFCC')))
-        
-        # Vẽ VIX lên trục phụ
-        fig.add_trace(go.Scatter(x=df.index, y=df['VIX'], name="VIX Index (Tâm lý)", yaxis="y2", line=dict(color='#FFD700', dash='dot')))
-
-        fig.update_layout(
-            height=550, template="plotly_dark",
-            yaxis=dict(title="Lãi suất Spread (%)"),
-            yaxis2=dict(title="VIX Index", overlaying="y", side="right", showgrid=False),
-            hovermode="x unified",
-            xaxis=dict(rangeslider=dict(visible=True))
+    if not df_final.empty:
+        # Chọn đồng tiền hiển thị
+        available_cols = df_final.columns.tolist()
+        selected_currencies = st.sidebar.multiselect(
+            "Chọn đồng tiền hiển thị:",
+            options=available_cols,
+            default=[c for c in ["USD (Mỹ)", "EUR (Châu Âu)"] if c in available_cols]
         )
-        st.plotly_chart(fig, use_container_width=True)
 
-        # --- BẢNG THỐNG KÊ CHI TIẾT ---
-        st.subheader("📝 Bảng dữ liệu vĩ mô gần đây")
-        st.dataframe(df.tail(10).sort_index(ascending=False), use_container_width=True)
+        st.sidebar.divider()
+        st.sidebar.header("⚖️ Phân tích Spread")
+        base_cur = st.sidebar.selectbox("Đồng tiền A:", options=available_cols, index=0)
+        target_cur = st.sidebar.selectbox("Đồng tiền B:", options=available_cols, index=min(2, len(available_cols)-1))
 
+        # --- SECTION 1: BIỂU ĐỒ CHÍNH ---
+        st.subheader(f"📊 Diễn biến Lãi suất {term_choice}")
+        if selected_currencies:
+            fig = go.Figure()
+            for col in selected_currencies:
+                fig.add_trace(go.Scatter(x=df_final.index, y=df_final[col], name=col, line=dict(width=2)))
+            
+            fig.update_layout(
+                height=500, template="plotly_dark", hovermode="x unified",
+                yaxis=dict(title="Lãi suất (%)", gridcolor='rgba(255,255,255,0.1)'),
+                xaxis=dict(rangeslider=dict(visible=True)),
+                legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # --- SECTION 2: BIỂU ĐỒ SPREAD ---
+            st.divider()
+            st.subheader(f"⚖️ Chênh lệch ({term_choice}): {base_cur} - {target_cur}")
+            spread_data = df_final[base_cur] - df_final[target_cur]
+            
+            c1, c2 = st.columns([1, 3])
+            c1.metric("Spread hiện tại", f"{spread_data.iloc[-1]:.2f}%", 
+                      f"{spread_data.iloc[-1] - spread_data.iloc[-20]:.2f}% (Tháng)")
+            
+            with c2:
+                fig_spread = go.Figure()
+                fig_spread.add_trace(go.Scatter(x=spread_data.index, y=spread_data, fill='tozeroy', name="Spread", line=dict(color='#00FFCC')))
+                fig_spread.update_layout(height=300, template="plotly_dark", margin=dict(t=10, b=10))
+                st.plotly_chart(fig_spread, use_container_width=True)
+            
+            # --- KIẾN THỨC VĨ MÔ ---
+            with st.expander("💡 Tại sao cần so sánh 2Y và 10Y?"):
+                st.write("""
+                * **Lãi suất 2 năm:** Phản ánh kỳ vọng về việc tăng/giảm lãi suất của Ngân hàng Trung ương trong tương lai gần.
+                * **Lãi suất 10 năm:** Phản ánh sức khỏe kinh tế dài hạn. 
+                * **Mẹo đầu tư:** Nếu lãi suất 2Y của một nước tăng nhanh hơn 10Y (Đường cong phẳng lại), đó thường là tín hiệu sắp có suy thoái hoặc thắt chặt tiền tệ cực mạnh.
+                """)
+        else:
+            st.info("Vui lòng chọn đồng tiền hiển thị ở thanh bên.")
     else:
-        st.warning("Đang chờ phản hồi từ máy chủ FRED...")
+        st.error("Không có dữ liệu. Hãy thử kiểm tra lại kết nối internet.")
 
 except Exception as e:
     st.error(f"Lỗi: {e}")
