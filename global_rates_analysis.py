@@ -3,9 +3,9 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 
-# 1. Cấu hình trang
-st.set_page_config(page_title="Macro Inversion Alert", layout="wide")
-st.title("🚨 Cảnh Báo Đảo Ngược Đường Cong Lợi Suất")
+# 1. Cấu hình trang chuyên sâu
+st.set_page_config(page_title="Intelligent Macro Hub", layout="wide")
+st.title("🧠 Hệ Thống Phân Tích Vĩ Mô Thông Minh")
 
 @st.cache_data(ttl=3600)
 def fetch_fred_csv(series_id):
@@ -16,71 +16,88 @@ def fetch_fred_csv(series_id):
     except:
         return pd.DataFrame()
 
-# Danh mục mã 2Y và 10Y để so sánh
-macro_pairs = {
-    "Mỹ (USD)": {"2Y": "DGS2", "10Y": "DGS10"},
-    "Châu Âu (EUR)": {"2Y": "IRT3TR01EZM156N", "10Y": "IRLTLT01EZM156N"},
-    "Nhật Bản (JPY)": {"2Y": "IR3TIB01JPM156N", "10Y": "IRLTLT01JPM156N"},
-    "Anh (GBP)": {"2Y": "IRT3TR01GBM156N", "10Y": "IRLTLT01GBM156N"}
-}
-
 try:
-    with st.spinner('📡 Đang quét tín hiệu đảo ngược từ FRED...'):
-        all_data = {}
-        for country, codes in macro_pairs.items():
-            df_2y = fetch_fred_csv(codes["2Y"])
-            df_10y = fetch_fred_csv(codes["10Y"])
-            if not df_2y.empty and not df_10y.empty:
-                combined = pd.concat([df_2y, df_10y], axis=1).ffill().dropna()
-                combined.columns = ['2Y', '10Y']
-                combined['Gap'] = combined['10Y'] - combined['2Y']
-                all_data[country] = combined.last('2Y')
+    with st.spinner('🤖 Thuật toán đang quét dữ liệu thị trường...'):
+        # Tải dữ liệu chính (Mỹ là đại diện dòng tiền thế giới)
+        us_2y = fetch_fred_csv("DGS2")
+        us_10y = fetch_fred_csv("DGS10")
+        vix = fetch_fred_csv("VIXCLS") # Chỉ số đo lường trạng thái sợ hãi
+        
+        # Kết hợp dữ liệu
+        df = pd.concat([us_2y, us_10y, vix], axis=1).ffill().dropna().last('3Y')
+        df.columns = ['US2Y', 'US10Y', 'VIX']
+        df['Gap'] = df['US10Y'] - df['US2Y']
 
-    # --- SECTION 1: BẢNG ĐIỀU KHIỂN CẢNH BÁO ---
-    st.subheader("⚠️ Trạng thái đường cong lợi suất hiện tại")
-    cols = st.columns(len(all_data))
-    
-    for i, (country, df) in enumerate(all_data.items()):
-        latest_gap = df['Gap'].iloc[-1]
-        with cols[i]:
-            if latest_gap < 0:
-                st.error(f"**{country}**")
-                st.metric("10Y - 2Y Gap", f"{latest_gap:.2f}%", "ĐẢO NGƯỢC")
+    if not df.empty:
+        curr = df.iloc[-1]
+        
+        # --- THUẬT TOÁN CHẤM ĐIỂM RỦI RO (MACRO RISK SCORE) ---
+        risk_score = 0
+        reasons = []
+        
+        # Kiểm tra Đảo ngược
+        if curr['Gap'] < 0:
+            risk_score += 40
+            reasons.append("🚩 Đường cong lợi suất Đảo ngược (Cảnh báo suy thoái)")
+        
+        # Kiểm tra VIX (Sợ hãi)
+        if curr['VIX'] > 30:
+            risk_score += 40
+            reasons.append("🚩 VIX trên 30: Thị trường đang hoảng loạn cực độ")
+        elif curr['VIX'] > 20:
+            risk_score += 20
+            reasons.append("⚠️ VIX trên 20: Tâm lý bất an đang gia tăng")
+            
+        # Kiểm tra xu hướng ngắn hạn
+        if curr['US2Y'] > df['US2Y'].iloc[-20]:
+            risk_score += 20
+            reasons.append("⚠️ Lãi suất ngắn hạn đang tăng: Áp lực thắt chặt tiền tệ")
+
+        # --- HIỂN THỊ ĐIỂM RỦI RO ---
+        st.subheader("📊 Đánh giá rủi ro hệ thống")
+        c1, c2 = st.columns([1, 2])
+        
+        with c1:
+            st.metric("Macro Risk Score", f"{risk_score}/100")
+            if risk_score >= 60:
+                st.error("CHẾ ĐỘ: PHÒNG THỦ CỰC ĐỘ")
+            elif risk_score >= 30:
+                st.warning("CHẾ ĐỘ: THẬN TRỌNG")
             else:
-                st.success(f"**{country}**")
-                st.metric("10Y - 2Y Gap", f"{latest_gap:.2f}%", "BÌNH THƯỜNG")
+                st.success("CHẾ ĐỘ: TĂNG TRƯỞNG")
+        
+        with c2:
+            st.write("**Các yếu tố ảnh hưởng hiện tại:**")
+            for r in reasons:
+                st.write(r)
 
-    # --- SECTION 2: BIỂU ĐỒ CHI TIẾT ---
-    st.divider()
-    target_country = st.selectbox("Chọn quốc gia để soi chi tiết lịch sử đảo ngược:", options=list(all_data.keys()))
-    
-    plot_df = all_data[target_country]
-    
-    fig = go.Figure()
-    # Vẽ vùng 0 để dễ quan sát
-    fig.add_hline(y=0, line_dash="solid", line_color="white", line_width=1)
-    
-    # Vẽ đường Gap (10Y - 2Y)
-    fig.add_trace(go.Scatter(
-        x=plot_df.index, y=plot_df['Gap'],
-        name="10Y-2Y Spread",
-        fill='tozeroy',
-        line=dict(color='#FF3366' if plot_df['Gap'].iloc[-1] < 0 else '#00FFCC')
-    ))
+        # --- BIỂU ĐỒ TƯƠNG QUAN THÔNG MINH ---
+        st.divider()
+        st.subheader("📈 Biểu đồ Tương quan: Lãi suất vs Tâm lý Sợ hãi")
+        
+        fig = go.Figure()
+        
+        # Vẽ vùng Đảo ngược
+        fig.add_trace(go.Scatter(x=df.index, y=df['Gap'], name="10Y-2Y Spread", fill='tozeroy', line=dict(color='#00FFCC')))
+        
+        # Vẽ VIX lên trục phụ
+        fig.add_trace(go.Scatter(x=df.index, y=df['VIX'], name="VIX Index (Tâm lý)", yaxis="y2", line=dict(color='#FFD700', dash='dot')))
 
-    fig.update_layout(
-        height=450, template="plotly_dark",
-        title=f"Lịch sử chênh lệch 10Y-2Y tại {target_country}",
-        yaxis=dict(title="Chênh lệch (%)"),
-        xaxis=dict(rangeslider=dict(visible=True))
-    )
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            height=550, template="plotly_dark",
+            yaxis=dict(title="Lãi suất Spread (%)"),
+            yaxis2=dict(title="VIX Index", overlaying="y", side="right", showgrid=False),
+            hovermode="x unified",
+            xaxis=dict(rangeslider=dict(visible=True))
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    # --- KIẾN THỨC CHIẾN THUẬT ---
-    st.info("""
-    **Chiến thuật quan sát:** 1. Khi đường Spread rơi xuống dưới 0 (vùng đỏ): Thị trường đang kỳ vọng suy thoái.
-    2. Khi đường Spread bắt đầu "ngoi lên" lại từ vùng âm (Un-inverting): Đây thường là lúc suy thoái thực sự bắt đầu xảy ra trên diện rộng.
-    """)
+        # --- BẢNG THỐNG KÊ CHI TIẾT ---
+        st.subheader("📝 Bảng dữ liệu vĩ mô gần đây")
+        st.dataframe(df.tail(10).sort_index(ascending=False), use_container_width=True)
+
+    else:
+        st.warning("Đang chờ phản hồi từ máy chủ FRED...")
 
 except Exception as e:
     st.error(f"Lỗi: {e}")
