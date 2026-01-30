@@ -1,0 +1,26 @@
+name: Daily Update
+on:
+  schedule:
+    - cron: '0 0 * * *' # Chạy vào 7h sáng mỗi ngày
+  workflow_dispatch: # Cho phép chạy tay để thử
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install yfinance plotly pandas
+      - name: Run code
+        run: python update_chart.py
+      - name: Save changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add index.html
+          git commit -m "Auto update" || exit 0
+          git push
