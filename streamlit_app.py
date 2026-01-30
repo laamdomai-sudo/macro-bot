@@ -8,7 +8,7 @@ st.set_page_config(page_title="Macro AI Dashboard", layout="wide")
 st.title("📊 Hệ Thống Giám Sát & Phân Tích Tương Quan")
 st.markdown("---")
 
-# 2. Hàm tải dữ liệu
+# 2. Hàm tải dữ liệu an toàn
 @st.cache_data(ttl=3600)
 def get_data():
     tickers = ['GC=F', 'SI=F', 'DX-Y.NYB']
@@ -17,84 +17,97 @@ def get_data():
     
     df = pd.DataFrame(index=raw.index)
     try:
+        # Xử lý Multi-index của Yahoo Finance
         df['Gold'] = raw['Close']['GC=F']
         df['Silver'] = raw['Close']['SI=F']
         df['DXY'] = raw['Close']['DX-Y.NYB']
     except:
-        df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
-        df['Silver'] = raw.xs('SI=F', axis=1, level=1)['Close']
-        df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
+        try:
+            df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
+            df['Silver'] = raw.xs('SI=F', axis=1, level=1)['Close']
+            df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
+        except:
+            pass
     return df.ffill().dropna()
 
 try:
     df = get_data()
     if not df.empty:
-        # Tính toán Ratio
+        # Tính toán các chỉ số cần thiết
         df['Ratio'] = df['Gold'] / df['Silver']
-        
-        # Lấy số liệu hiện tại
-        curr = df.iloc[-1]
-        prev = df.iloc[-2]
+        last_gold = df['Gold'].iloc[-1]
+        prev_gold = df['Gold'].iloc[-2]
+        last_dxy = df['DXY'].iloc[-1]
+        prev_dxy = df['DXY'].iloc[-2]
+        last_date = df.index[-1].strftime('%d/%m/%Y')
+
+        st.write(f"Dữ liệu cập nhật ngày: **{last_date}**")
 
         # 3. Hiển thị Metrics
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Vàng (USD/oz)", f"${curr['Gold']:,.1f}", f"{curr['Gold'] - prev['Gold']:,.1f}")
-        c2.metric("Bạc (USD/oz)", f"${curr['Silver']:,.2f}", f"{curr['Silver'] - prev['Silver']:,.2f}")
-        c3.metric("Chỉ số DXY", f"{curr['DXY']:.2f}", f"{curr['DXY'] - prev['DXY']:.2f}")
-        c4.metric("Tỷ lệ Vàng/Bạc", f"{curr['Ratio']:.1f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Vàng (USD/oz)", f"${last_gold:,.2f}", f"{last_gold - prev_gold:,.2f}")
+        c2.metric("Chỉ số DXY", f"{last_dxy:.2f}", f"{last_dxy - prev_dxy:.2f}")
+        c3.metric("Tỷ lệ Vàng/Bạc", f"{df['Ratio'].iloc[-1]:.1f}")
 
-        # 4. VẼ BIỂU ĐỒ 3 CHỈ SỐ (ĐÃ SỬA LỖI HIỂN THỊ ĐƯỜNG BẠC)
+        # 4. VẼ BIỂU ĐỒ TƯƠNG QUAN (SỬA LỖI SYNTAX)
         fig = go.Figure()
 
-        # Đường Vàng - Trục trái (Y1)
+        # Thêm Vàng (Trục trái)
         fig.add_trace(go.Scatter(
-            x=df.index, y=df['Gold'],
-            name="Vàng (Trục Trái)",
+            x=df.index, 
+            y=df['Gold'], 
+            name="Vàng (USD/oz)",
             line=dict(color='#FFD700', width=2.5)
         ))
 
-        # Đường Bạc - Chuyển sang Trục phải (Y2) để nhìn rõ hơn
+        # Thêm Bạc (Trục trái)
         fig.add_trace(go.Scatter(
-            x=df.index, y=df['Silver'],
-            name="Bạc (Trục Phải)",
-            line=dict(color='#C0C0C0', width=2),
-            yaxis="y2"
+            x=df.index, 
+            y=df['Silver'], 
+            name="Bạc (USD/oz)",
+            line=dict(color='#C0C0C0', width=1.5)
         ))
 
-        # Đường DXY - Trục phải (Y2)
+        # Thêm DXY (Trục phải - Secondary Axis)
         fig.add_trace(go.Scatter(
-            x=df.index, y=df['DXY'],
-            name="DXY (Trục Phải)",
+            x=df.index, 
+            y=df['DXY'], 
+            name="Chỉ số DXY (Trục Phải)",
             line=dict(color='#00CCFF', width=2),
             yaxis="y2"
         ))
 
-        # Cấu hình Layout Trục kép
+        # Cấu hình Layout chuẩn
         fig.update_layout(
             height=700,
             template="plotly_dark",
             hovermode="x unified",
-            title="Tương Quan Biến Động: Vàng - Bạc - DXY",
+            title=dict(text="Tương Quan Biến Động: Vàng - Bạc - DXY"),
+            # Trục Y trái (Vàng/Bạc)
             yaxis=dict(
-                title="Giá Vàng (USD/oz)",
-                titlefont=dict(color="#FFD700"),
-                tickfont=dict(color="#FFD700")
+                title=dict(text="Giá Vàng & Bạc (USD/oz)", font=dict(color="#FFD700")),
+                tickfont=dict(color="#FFD700"),
+                gridcolor="rgba(255, 255, 255, 0.1)"
             ),
+            # Trục Y phải (DXY)
             yaxis2=dict(
-                title="Giá Bạc & Chỉ số DXY",
-                titlefont=dict(color="#00CCFF"),
+                title=dict(text="Chỉ số DXY", font=dict(color="#00CCFF")),
                 tickfont=dict(color="#00CCFF"),
                 overlaying="y",
                 side="right",
-                showgrid=False # Tắt grid trục 2 để tránh rối mắt
+                showgrid=False
             ),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # 5. Phân tích tự động
-        st.info(f"💡 **Phân tích:** Hiện tại Bạc và DXY đang được hiển thị cùng thang đo bên phải (vùng ~100). Điều này giúp bạn so sánh trực tiếp xem khi DXY giảm thì Bạc có bùng nổ mạnh hơn Vàng hay không.")
+        # 5. Khu vực dữ liệu
+        with st.expander("📥 Xem bảng số liệu chi tiết"):
+            st.dataframe(df.sort_index(ascending=False), use_container_width=True)
+
+    else:
+        st.error("⚠️ Không thể tải dữ liệu. Hãy kiểm tra kết nối Yahoo Finance.")
 
 except Exception as e:
-    st.error(f"Lỗi: {e}")
+    st.error(f"Lỗi hệ thống: {str(e)}")
