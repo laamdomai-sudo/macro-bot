@@ -1,122 +1,100 @@
 import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
-import numpy as np
 
-# 1. Cấu hình (CHỈ GỌI 1 LẦN DUY NHẤT Ở ĐẦU)
-st.set_page_config(page_title="Macro AI Predictor", layout="wide")
-st.title("🧠 Hệ Thống Dự Báo & Quản Lý Danh Mục Vàng - DXY")
+# 1. Cấu hình duy nhất
+st.set_page_config(page_title="Macro AI & MACD", layout="wide")
+st.title("🧠 Hệ Thống Định Lượng: Gold - DXY - MACD")
 
 @st.cache_data(ttl=3600)
-def get_advanced_data():
-    # Tải dữ liệu
+def get_data():
     raw = yf.download(['GC=F', 'DX-Y.NYB'], period="max", auto_adjust=True)
+    if raw.empty or len(raw) < 200: return pd.DataFrame()
     
-    if raw.empty or len(raw) < 200:
-        return pd.DataFrame()
-
     df = pd.DataFrame(index=raw.index)
-    
-    # Xử lý MultiIndex của yfinance
     try:
         df['Gold'] = raw['Close']['GC=F']
         df['DXY'] = raw['Close']['DX-Y.NYB']
     except:
         df['Gold'] = raw.xs('GC=F', axis=1, level=1)['Close']
         df['DXY'] = raw.xs('DX-Y.NYB', axis=1, level=1)['Close']
-    
-    # Tính toán chỉ báo
+
+    # --- TÍNH TOÁN CHỈ BÁO ---
+    # MA200 & RSI
     df['MA200'] = df['Gold'].rolling(window=200).mean()
-    
-    # RSI
     delta = df['Gold'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
-    
-    # Các chỉ số bổ sung
-    df['Dist_MA200'] = ((df['Gold'] - df['MA200']) / df['MA200']) * 100
-    df['Return_10d'] = df['Gold'].shift(-10) / df['Gold'] - 1
-    
-    # Chỉ dropna sau khi đã tính xong MA200 để đảm bảo có đủ dữ liệu
+    df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+
+    # MACD (12, 26, 9)
+    exp1 = df['Gold'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Gold'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
+
     return df.dropna()
 
-# Thực thi chính
 try:
-    df = get_advanced_data()
-    
-    if df.empty or len(df) < 2:
-        st.error("Không đủ dữ liệu để phân tích. Vui lòng thử lại sau hoặc kiểm tra kết nối mạng.")
+    df = get_data()
+    if df.empty:
+        st.error("Không tải được dữ liệu.")
     else:
-        # Lấy dữ liệu dòng cuối và dòng kế cuối an toàn
-        curr = df.iloc[-1]
-        prev = df.iloc[-2]
-        curr_price = curr['Gold']
-
-        # --- PHẦN 1: SIDEBAR QUẢN LÝ DANH MỤC ---
-        st.sidebar.header("💰 Danh Mục Của Bạn")
-        holdings = st.sidebar.number_input("Số lượng nắm giữ (oz)", min_value=0.0, value=1.0, step=0.1)
-        entry_price = st.sidebar.number_input("Giá vốn (USD/oz)", min_value=0.0, value=2000.0, step=10.0)
+        # --- SIDEBAR QUẢN LÝ ---
+        st.sidebar.header("💰 Portfolio")
+        entry = st.sidebar.number_input("Giá vốn (USD)", value=2000.0)
         
-        current_value = holdings * curr_price
-        total_cost = holdings * entry_price
-        pnl = current_value - total_cost
-        pnl_pct = (pnl / total_cost * 100) if total_cost > 0 else 0
+        # --- BIỂU ĐỒ TỔNG HỢP (Gồm thanh kéo thời gian) ---
+        # Tạo 3 hàng: 1 cho giá & DXY, 1 cho MACD, 1 cho RSI
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, 
+                            vertical_spacing=0.05, 
+                            row_heights=[0.5, 0.25, 0.25],
+                            specs=[[{"secondary_y": True}], [{}], [{}]])
 
-        st.sidebar.divider()
-        st.sidebar.subheader("Báo cáo nhanh")
-        st.sidebar.metric("Tổng giá trị", f"${current_value:,.2f}")
-        st.sidebar.metric("Lời / Lỗ", f"${pnl:,.2f}", f"{pnl_pct:.2f}%")
+        # Hàng 1: Gold, MA200 và DXY
+        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Vàng", line=dict(color='#FFD700')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['MA200'], name="MA200", line=dict(color='#FF00FF', dash='dot')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'], name="DXY (Trục phải)", line=dict(color='#00CCFF', width=1)), row=1, col=1, secondary_y=True)
+        fig.add_hline(y=entry, line_dash="dash", line_color="white", annotation_text="Giá vốn", row=1, col=1)
 
-        # --- PHẦN 2: TRẠM DỰ BÁO ---
-        st.subheader("🔮 Hệ Thống Dự Báo & Đánh Giá Vị Thế")
-        c1, c2, c3 = st.columns(3)
+        # Hàng 2: MACD
+        fig.add_trace(go.Scatter(x=df.index, y=df['MACD'], name="MACD", line=dict(color='cyan', width=1)), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name="Tín hiệu", line=dict(color='orange', width=1)), row=2, col=1)
+        fig.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name="Histogram", marker_color='gray', opacity=0.5), row=2, col=1)
 
-        with c1:
-            rsi_val = curr['RSI']
-            st.markdown(f"#### 🌡️ RSI: {rsi_val:.1f}")
-            if rsi_val > 70: st.error("QUÁ MUA: Rủi ro điều chỉnh cao.")
-            elif rsi_val < 30: st.success("QUÁ BÁN: Cơ hội hồi phục.")
-            else: st.info("TRUNG TÍNH: Xu hướng ổn định.")
+        # Hàng 3: RSI
+        fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], name="RSI", line=dict(color='white', width=1)), row=3, col=1)
+        fig.add_hline(y=70, line_dash="dot", line_color="red", row=3, col=1)
+        fig.add_hline(y=30, line_dash="dot", line_color="green", row=3, col=1)
 
-        with c2:
-            dist = curr['Dist_MA200']
-            st.markdown(f"#### 📏 Lệch MA200: {dist:.1f}%")
-            if abs(dist) > 15: st.warning("CẢNH BÁO: Giá đang quá xa đường trung bình.")
-            else: st.success("VÙNG AN TOÀN: Bám sát xu hướng dài hạn.")
-
-        with c3:
-            dxy_trend = df['DXY'].iloc[-1] - df['DXY'].iloc[-10]
-            st.markdown("#### 🎯 Xu Hướng DXY")
-            if dxy_trend > 0: st.error("📉 DỰ BÁO GIẢM: DXY mạnh gây áp lực lên Vàng.")
-            else: st.success("📈 DỰ BÁO TĂNG: DXY yếu ủng hộ giá Vàng.")
-
-        # --- PHẦN 3: BIỂU ĐỒ ---
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=df['Gold'], name="Giá Vàng", line=dict(color='#FFD700')))
-        fig.add_trace(go.Scatter(x=df.index, y=df['MA200'], name="MA200", line=dict(color='#FF00FF', dash='dash')))
-        fig.add_trace(go.Scatter(x=df.index, y=df['DXY'], name="DXY", yaxis="y2", line=dict(color='#00CCFF', width=1)))
-        
-        # Đường giá vốn
-        fig.add_hline(y=entry_price, line_dash="dot", line_color="white", annotation_text="Giá vốn")
-
+        # Cấu hình thanh kéo thời gian (Range Slider)
         fig.update_layout(
-            height=500, template="plotly_dark", hovermode="x unified",
-            yaxis2=dict(overlaying="y", side="right", showgrid=False),
-            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
+            height=800, template="plotly_dark",
+            xaxis3_rangeslider_visible=True, # Thanh kéo nằm ở dưới cùng
+            xaxis3_rangeslider_thickness=0.05,
+            hovermode="x unified",
+            margin=dict(l=50, r=50, t=30, b=50)
         )
+        
+        fig.update_yaxes(title_text="Giá Vàng", row=1, col=1)
+        fig.update_yaxes(title_text="DXY", secondary_y=True, row=1, col=1)
+        fig.update_yaxes(title_text="MACD", row=2, col=1)
+        fig.update_yaxes(title_text="RSI", row=3, col=1)
+
         st.plotly_chart(fig, use_container_width=True)
 
-        # --- PHẦN 4: BACKTEST ---
-        with st.expander("📊 Xem Dữ Liệu Kiểm Chứng RSI"):
-            overbought = df[df['RSI'] > 70].copy()
-            if not overbought.empty:
-                win_rate = (overbought['Return_10d'] < 0).sum() / len(overbought) * 100
-                st.metric("Xác suất giảm sau khi Quá Mua (>70)", f"{win_rate:.1f}%")
-            else:
-                st.write("Chưa có dữ liệu quá mua trong tập dữ liệu này.")
+        # --- ĐÁNH GIÁ NHANH ---
+        curr = df.iloc[-1]
+        st.subheader("📝 Phân tích kỹ thuật nhanh")
+        k1, k2 = st.columns(2)
+        with k1:
+            macd_signal = "CẮT LÊN (MUA)" if curr['MACD'] > curr['Signal_Line'] else "CẮT XUỐNG (BÁN)"
+            st.metric("Tín hiệu MACD", macd_signal)
+        with k2:
+            st.metric("Chỉ số RSI", f"{curr['RSI']:.2f}")
 
 except Exception as e:
-    st.error(f"Đã xảy ra lỗi hệ thống: {e}")
+    st.error(f"Lỗi: {e}")
