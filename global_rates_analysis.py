@@ -4,91 +4,98 @@ import plotly.graph_objects as go
 from datetime import datetime
 
 # 1. Cấu hình trang
-st.set_page_config(page_title="Global Rates Dashboard", layout="wide")
-st.title("🌍 Biểu Đồ Lãi Suất Các Đồng Tiền Chủ Chốt (Real-time)")
-st.markdown("So sánh lợi suất trái phiếu Chính phủ 10 năm (Benchmark Rates)")
+st.set_page_config(page_title="Custom Global Rates", layout="wide")
+st.title("🌍 Dashboard Lãi Suất Toàn Cầu & Phân Tích Spread")
 
-# Hàm tải dữ liệu trực tiếp từ CSV của FRED
+# Hàm tải dữ liệu từ FRED
 @st.cache_data(ttl=3600)
 def fetch_fred_csv(series_id):
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
     try:
         data = pd.read_csv(url, index_col=0, parse_dates=True, na_values='.')
         return data
-    except Exception as e:
+    except:
         return pd.DataFrame()
 
+# 2. Khởi tạo danh mục các đồng tiền
+symbols = {
+    "USD (Mỹ)": "DGS10",
+    "EUR (Châu Âu)": "IRLTLT01EZM156N",
+    "JPY (Nhật Bản)": "IRLTLT01JPM156N",
+    "GBP (Anh)": "IRLTLT01GBM156N",
+    "CNY (Trung Quốc)": "CHNRYLD2Y"
+}
+
 try:
-    with st.spinner('📡 Đang trích xuất dữ liệu vĩ mô toàn cầu...'):
-        # Định nghĩa các mã Series ID trên FRED
-        symbols = {
-            "DGS10": "USD (Mỹ)",
-            "IRLTLT01EZM156N": "EUR (Khu vực Euro)",
-            "IRLTLT01JPM156N": "JPY (Nhật Bản)",
-            "IRLTLT01GBM156N": "GBP (Anh)",
-            "CHNRYLD2Y": "CNY (Trung Quốc - 2Y)*" # CNY thường dùng kỳ hạn ngắn hơn để theo dõi
-        }
-        
+    with st.spinner('📡 Đang đồng bộ dữ liệu vĩ mô...'):
         data_frames = []
-        for sid, name in symbols.items():
+        for name, sid in symbols.items():
             df_temp = fetch_fred_csv(sid)
             if not df_temp.empty:
                 df_temp.columns = [name]
                 data_frames.append(df_temp)
         
-        # Kết hợp và xử lý dữ liệu
-        df_final = pd.concat(data_frames, axis=1)
-        df_final = df_final.ffill().dropna().last('5Y') # Lấy 5 năm gần nhất
+        df_final = pd.concat(data_frames, axis=1).ffill().dropna().last('5Y')
+
+    # --- SIDEBAR: ĐIỀU KHIỂN ---
+    st.sidebar.header("🎯 Tùy chọn hiển thị")
+    
+    # Tính năng 1: Chọn đồng tiền hiển thị
+    selected_currencies = st.sidebar.multiselect(
+        "Chọn các đồng tiền muốn xem:",
+        options=list(symbols.keys()),
+        default=list(symbols.keys())[:3] # Mặc định hiện 3 cái đầu
+    )
+
+    # Tính năng 2: Chọn cặp so sánh Spread
+    st.sidebar.divider()
+    st.sidebar.header("⚖️ So sánh Chênh lệch (Spread)")
+    base_cur = st.sidebar.selectbox("Đồng tiền cơ sở (A):", options=list(symbols.keys()), index=0)
+    target_cur = st.sidebar.selectbox("Đồng tiền so sánh (B):", options=list(symbols.keys()), index=2)
 
     if not df_final.empty:
-        # 2. Hiển thị Metrics hiện tại
-        curr = df_final.iloc[-1]
-        cols = st.columns(len(symbols))
-        for i, (name, val) in enumerate(curr.items()):
-            cols[i].metric(name, f"{val:.2f}%")
+        # --- SECTION 1: BIỂU ĐỒ CHÍNH ---
+        st.subheader("📊 Diễn biến Lãi suất 10 Năm")
+        if selected_currencies:
+            fig = go.Figure()
+            for col in selected_currencies:
+                fig.add_trace(go.Scatter(x=df_final.index, y=df_final[col], name=col, line=dict(width=2)))
+            
+            fig.update_layout(
+                height=500, template="plotly_dark", hovermode="x unified",
+                yaxis=dict(title="Lãi suất (%)", gridcolor='rgba(255,255,255,0.1)'),
+                xaxis=dict(rangeslider=dict(visible=True)),
+                legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("Vui lòng chọn ít nhất một đồng tiền để hiển thị biểu đồ.")
 
-        # 3. Vẽ biểu đồ Plotly
-        st.subheader("📈 Biến Động Lãi Suất Toàn Cầu (2021 - 2026)")
-        fig = go.Figure()
-        
-        colors = ['#FF4B4B', '#1E88E5', '#00C853', '#AA00FF', '#FFD700']
-        
-        for i, col in enumerate(df_final.columns):
-            fig.add_trace(go.Scatter(
-                x=df_final.index, 
-                y=df_final[col], 
-                name=col,
-                line=dict(width=2, color=colors[i % len(colors)])
-            ))
-
-        fig.update_layout(
-            height=600,
-            template="plotly_dark",
-            hovermode="x unified",
-            yaxis=dict(title="Lãi suất (%)", gridcolor='rgba(255,255,255,0.1)'),
-            xaxis=dict(title="Thời gian", rangeslider=dict(visible=True), gridcolor='rgba(255,255,255,0.1)'),
-            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center")
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-        # 4. Phân tích tương quan
+        # --- SECTION 2: BIỂU ĐỒ SPREAD ---
         st.divider()
-        st.subheader("💡 Nhận Định Vĩ Mô")
+        st.subheader(f"⚖️ Chênh lệch Lãi suất: {base_cur} - {target_cur}")
         
-        max_rate = curr.idxmax()
-        min_rate = curr.idxmin()
+        spread_data = df_final[base_cur] - df_final[target_cur]
+        curr_spread = spread_data.iloc[-1]
         
-        c1, c2 = st.columns(2)
+        c1, c2 = st.columns([1, 3])
         with c1:
-            st.write(f"🚀 **Đồng tiền có lãi suất cao nhất:** `{max_rate}` ({curr[max_rate]:.2f}%)")
-            st.write("Dòng vốn thường có xu hướng chảy về các đồng tiền có lãi suất thực cao để tìm kiếm lợi nhuận.")
+            st.metric(f"Spread Hiện Tại", f"{curr_spread:.2f}%", f"{curr_spread - spread_data.iloc[-10]:.2f}% (10 phiên)")
+            st.write(f"Ý nghĩa: Khi đường này tăng, đồng `{base_cur}` có xu hướng mạnh lên so với `{target_cur}`.")
+            
         with c2:
-            st.write(f"📉 **Đồng tiền có lãi suất thấp nhất:** `{min_rate}` ({curr[min_rate]:.2f}%)")
-            st.write("Các đồng tiền lãi suất thấp thường được dùng làm 'Funding Currency' trong các chiến lược Carry Trade.")
-
-    else:
-        st.error("⚠️ Không thể tải dữ liệu. Vui lòng thử lại sau.")
+            fig_spread = go.Figure()
+            fig_spread.add_trace(go.Scatter(
+                x=spread_data.index, y=spread_data, 
+                fill='tozeroy', name="Spread",
+                line=dict(color='#00FFCC')
+            ))
+            fig_spread.update_layout(
+                height=300, template="plotly_dark",
+                yaxis=dict(title="Chênh lệch (%)", gridcolor='rgba(255,255,255,0.1)'),
+                margin=dict(t=10, b=10)
+            )
+            st.plotly_chart(fig_spread, use_container_width=True)
 
 except Exception as e:
-    st.error(f"Lỗi hệ thống: {e}")
+    st.error(f"Lỗi vận hành: {e}")
