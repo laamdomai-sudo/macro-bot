@@ -4,13 +4,16 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 1. Cấu hình giao diện
+# 1. Cấu hình giao diện & Dark Mode
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
 
-st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
-st.markdown(f"**Cập nhật dữ liệu ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
+# Áp dụng style tối cho biểu đồ Matplotlib
+plt.style.use('dark_background')
 
-# 2. Định nghĩa dữ liệu lịch sử lạm phát (Đặt ở đây để tránh lỗi 'df_hist not defined')
+st.title("📊 Macro-Bot: Quy luật 'Vật cực tất phản'")
+st.markdown(f"**Dữ liệu thực tế ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
+
+# 2. Dữ liệu lịch sử lạm phát 
 vn_inflation_hist = {
     "Năm": [2008, 2011, 2012, 2015, 2020, 2022, 2023, 2024, 2025],
     "Lạm phát (%)": [19.8, 18.1, 9.2, 0.6, 3.2, 3.1, 3.2, 3.5, 4.0],
