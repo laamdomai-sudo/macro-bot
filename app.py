@@ -6,10 +6,6 @@ import numpy as np
 
 # 1. Cấu hình giao diện
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
-
-# Thiết lập giao diện tối (Dark mode) cho biểu đồ
-plt.style.use('dark_background')
-
 st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
 st.markdown(f"**Cập nhật dữ liệu thực tế ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
 
@@ -89,9 +85,12 @@ try:
         ax2 = ax1.twinx()
         ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=1, label="S&P 500", alpha=0.5)
         ax2.set_ylabel("S&P 500", color='#2E8B57', fontweight='bold')
+
+        # Highlight vùng dự báo
+        color_zone = 'cyan' if real_ir > 0 else 'orange'
+        ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.1)
         
-        plt.title(f"Tương quan Tài sản & Lãi suất thực ({real_ir:.1f}%)", color='white')
-        ax1.legend(loc='upper left')
+        plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white')
         st.pyplot(fig)
 
         # 8. Tham chiếu lịch sử & Phân tích
