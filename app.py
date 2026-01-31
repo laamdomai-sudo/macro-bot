@@ -86,37 +86,38 @@ try:
         fig.patch.set_facecolor('#0E1117')
         ax1.set_facecolor('#0E1117')
 
-        # Trục bên trái: Vàng
+        # Trục Vàng
         lns1 = ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
         lns2 = ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo (Real IR)")
         ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
         ax1.grid(True, alpha=0.1)
 
-        # Trục bên phải: Chứng khoán S&P 500
+        # Trục S&P 500
         ax2 = ax1.twinx()
         lns3 = ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=1, label="S&P 500", alpha=0.5)
         ax2.set_ylabel("S&P 500", color='#2E8B57', fontweight='bold')
 
-        # --- PHẦN HIGHLIGHT VÀ CHÚ THÍCH ĐỘNG ---
-        if real_ir > 0:
-            # Lãi suất thực dương -> Vùng hút tiền về Bank
-            color_zone = 'cyan'
-            msg = "VÙNG HÚT TIỀN VỀ BANK"
-        else:
-            # Lãi suất thực âm -> Vùng tháo chạy sang Vàng
-            color_zone = 'orange'
-            msg = "VÙNG THÁO CHẠY SANG VÀNG"
+        # --- XỬ LÝ VÙNG HIGHLIGHT VÀ CHÚ THÍCH TRONG BOX ---
+        import matplotlib.patches as mpatches # Cần thêm thư viện này
 
+        if real_ir > 0:
+            color_zone = 'cyan'
+            label_zone = "Vùng hút tiền về Bank"
+        else:
+            color_zone = 'orange'
+            label_zone = "Vùng trú ẩn (Vàng ưu thế)"
+
+        # Vẽ vùng highlight
         ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.15)
         
-        # Thêm text chú thích ngay trong vùng highlight
-        ax1.text(future_dates[5], curr_gold_usd * 1.05, msg, 
-                 color=color_zone, fontsize=9, fontweight='bold', rotation=90, verticalalignment='center')
-        # ---------------------------------------
+        # Tạo một Patch để đưa vào Legend
+        zone_patch = mpatches.Patch(color=color_zone, alpha=0.3, label=label_zone)
+        # --------------------------------------------------
 
-        lns = lns1 + lns2 + lns3
+        # Gộp tất cả các đường và vùng màu vào chú thích
+        lns = lns1 + lns2 + lns3 + [zone_patch]
         labs = [l.get_label() for l in lns]
-        ax1.legend(lns, labs, loc='upper left', facecolor='#1E1E1E', edgecolor='white')
+        ax1.legend(lns, labs, loc='upper left', facecolor='#1E1E1E', edgecolor='white', fontsize='small')
 
         plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white', pad=20)
         st.pyplot(fig)
