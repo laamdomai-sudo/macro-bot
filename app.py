@@ -78,7 +78,7 @@ try:
         m3.metric("S&P 500", f"{curr_stock:,.1f}")
 
         # 7. Vẽ biểu đồ tương quan Live & Dự báo
-        st.subheader("📈 Diễn biến tương quan & Dự báo hướng đi")
+        st.subheader("📈 Mô Phỏng diễn biến tương quan & Dự báo hướng đi")
         future_dates = pd.date_range(start=gold_series.index[-1], periods=30)
         gold_projection = [curr_gold_usd * (1 - (real_ir/1000))**i for i in range(30)]
         
