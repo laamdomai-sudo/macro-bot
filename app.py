@@ -73,6 +73,5 @@ try:
         future_dates = pd.date_range(start=gold_series.index[-1], periods=30)
         gold_projection = [curr_gold_usd * (1 - (real_ir/1000))**i for i in range(30)]
         
-        fig, ax1 = plt.subplots(figsize=(10, 5))
         ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
-        ax1.plot(future_dates
+        ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo (Real IR)")
