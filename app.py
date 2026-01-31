@@ -93,9 +93,7 @@ try:
         plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white')
         st.pyplot(fig)
         
-        plt.title(f"Tương quan Tài sản & Lãi suất thực")
         ax1.legend(loc='upper left')
-        st.pyplot(fig)
 
         # 8. Tham chiếu lịch sử & Phân tích
         st.divider()
