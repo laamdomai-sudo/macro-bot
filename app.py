@@ -92,22 +92,34 @@ try:
         ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
         ax1.grid(True, alpha=0.1)
 
-        # Trục bên phải: Chứng khoán
+        # Trục bên phải: Chứng khoán S&P 500
         ax2 = ax1.twinx()
         lns3 = ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=1, label="S&P 500", alpha=0.5)
         ax2.set_ylabel("S&P 500", color='#2E8B57', fontweight='bold')
 
-        # Highlight vùng dự báo
-        color_zone = 'cyan' if real_ir > 0 else 'orange'
-        ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.1, label="Vùng dự báo")
+        # --- PHẦN HIGHLIGHT VÀ CHÚ THÍCH ĐỘNG ---
+        if real_ir > 0:
+            # Lãi suất thực dương -> Vùng hút tiền về Bank
+            color_zone = 'cyan'
+            msg = "VÙNG HÚT TIỀN VỀ BANK"
+        else:
+            # Lãi suất thực âm -> Vùng tháo chạy sang Vàng
+            color_zone = 'orange'
+            msg = "VÙNG THÁO CHẠY SANG VÀNG"
+
+        ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.15)
         
-        # Gộp chú thích từ cả 2 trục vào 1 bảng duy nhất
+        # Thêm text chú thích ngay trong vùng highlight
+        ax1.text(future_dates[5], curr_gold_usd * 1.05, msg, 
+                 color=color_zone, fontsize=9, fontweight='bold', rotation=90, verticalalignment='center')
+        # ---------------------------------------
+
         lns = lns1 + lns2 + lns3
         labs = [l.get_label() for l in lns]
         ax1.legend(lns, labs, loc='upper left', facecolor='#1E1E1E', edgecolor='white')
 
         plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white', pad=20)
-        st.pyplot(fig) # Lệnh này phải nằm sau legend
+        st.pyplot(fig)
 
         # 8. Tham chiếu lịch sử & Phân tích
         st.divider()
