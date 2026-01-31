@@ -39,7 +39,7 @@ try:
         curr_stock = float(stock_series.iloc[-1])
         curr_exchange_rate = float(usdvnd_series.iloc[-1])
 
-        # 5. Sidebar cấu hình (Chỉ khai báo 1 lần duy nhất)
+        # 5. Sidebar cấu hình
         st.sidebar.header("🕹️ Điều khiển Vĩ mô 2026")
         cpi = st.sidebar.slider("Lạm phát dự kiến (%)", 1.0, 20.0, 4.5)
         ir = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 20.0, 7.5)
@@ -71,40 +71,8 @@ try:
         # 7. Vẽ biểu đồ tương quan Live & Dự báo
         st.subheader("Diễn biến tương quan & Dự báo hướng đi")
         future_dates = pd.date_range(start=gold_series.index[-1], periods=30)
-        # Dự báo dựa trên Real IR
         gold_projection = [curr_gold_usd * (1 - (real_ir/1000))**i for i in range(30)]
         
         fig, ax1 = plt.subplots(figsize=(10, 5))
         ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
-        ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo (Real IR)")
-        ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
-        ax1.grid(True, alpha=0.2)
-
-        ax2 = ax1.twinx()
-        ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=2, label="S&P 500", alpha=0.4)
-        ax2.set_ylabel("S&P 500", color='#2E8B57', fontweight='bold')
-        
-        if real_ir > 0:
-            ax1.axvspan(gold_series.index[-1], future_dates[-1], color='blue', alpha=0.1)
-        else:
-            ax1.axvspan(gold_series.index[-1], future_dates[-1], color='orange', alpha=0.1)
-
-        plt.title(f"Tác động của Lãi suất thực đến Giá Vàng")
-        ax1.legend(loc='upper left')
-        st.pyplot(fig)
-
-        # 8. Tham chiếu lịch sử & Phân tích
-st.divider()
-col_hist1, col_hist2 = st.columns([2, 1])
-
-with col_hist1:  # <-- Phải có dấu hai chấm ở đây
-    st.subheader("📚 Lịch sử Lạm phát Việt Nam")
-    fig_h, ax_h = plt.subplots(figsize=(10, 4))
-    ax_h.bar(df_hist["Năm"].astype(str), df_hist["Lạm phát (%)"], color='tomato', alpha=0.7)
-    ax_h.axhline(cpi, color='blue', ls='--', label=f"Dự báo của bạn ({cpi}%)")
-    ax_h.legend()
-    st.pyplot(fig_h)
-
-with col_hist2:  # <-- Phải có dấu hai chấm ở đây
-    st.write("Dữ liệu chi tiết")
-    st.dataframe(df_hist, hide_index=True)
+        ax1.plot(future_dates
