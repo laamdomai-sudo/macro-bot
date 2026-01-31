@@ -76,24 +76,27 @@ try:
         ax1.set_facecolor('#0E1117')
 
         # Trục bên trái: Vàng
-        ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
-        ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo (Real IR)")
+        lns1 = ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
+        lns2 = ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo (Real IR)")
         ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
         ax1.grid(True, alpha=0.1)
 
         # Trục bên phải: Chứng khoán
         ax2 = ax1.twinx()
-        ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=1, label="S&P 500", alpha=0.5)
+        lns3 = ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=1, label="S&P 500", alpha=0.5)
         ax2.set_ylabel("S&P 500", color='#2E8B57', fontweight='bold')
 
         # Highlight vùng dự báo
         color_zone = 'cyan' if real_ir > 0 else 'orange'
-        ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.1)
+        ax1.axvspan(gold_series.index[-1], future_dates[-1], color=color_zone, alpha=0.1, label="Vùng dự báo")
         
-        plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white')
-        st.pyplot(fig)
-        
-        ax1.legend(loc='upper left')
+        # Gộp chú thích từ cả 2 trục vào 1 bảng duy nhất
+        lns = lns1 + lns2 + lns3
+        labs = [l.get_label() for l in lns]
+        ax1.legend(lns, labs, loc='upper left', facecolor='#1E1E1E', edgecolor='white')
+
+        plt.title(f"Mô phỏng Lãi suất thực: {real_ir:.1f}%", color='white', pad=20)
+        st.pyplot(fig) # Lệnh này phải nằm sau legend
 
         # 8. Tham chiếu lịch sử & Phân tích
         st.divider()
@@ -106,15 +109,16 @@ try:
             ax_h.set_facecolor('#0E1117')
             ax_h.bar(df_hist["Năm"].astype(str), df_hist["Lạm phát (%)"], color='tomato', alpha=0.7)
             ax_h.axhline(cpi, color='cyan', ls='--', label=f"Dự báo 2026 ({cpi}%)")
-            ax_h.set_ylabel("Lạm phát (%)")
-            ax_h.legend()
+            ax_h.set_ylabel("Lạm phát (%)", color='white')
+            ax_h.tick_params(colors='white')
+            ax_h.legend(facecolor='#1E1E1E', edgecolor='white')
             st.pyplot(fig_h)
 
         with col_hist2:
             st.write("**Bảng dữ liệu chi tiết**")
             st.dataframe(df_hist, hide_index=True)
 
-        # 9. Nhận định tự động (Tính năng bổ sung)
+        # 9. Nhận định tự động
         st.subheader("💡 Nhận định từ Hệ thống")
         if real_ir < 0:
             st.warning("⚠️ **VẬT CỰC:** Lãi suất thực âm. Dòng tiền có xu hướng tháo chạy khỏi ngân hàng để tìm đến Vàng/Bất động sản.")
