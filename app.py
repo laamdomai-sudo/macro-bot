@@ -46,18 +46,29 @@ try:
 
         st.sidebar.divider()
         st.sidebar.header("🏆 Kịch bản Vàng 2026")
-        scenario = st.sidebar.selectbox("Chọn kịch bản thị trường:", 
-            ["Tăng trưởng ổn định", "Sốt nóng (Vật cực)", "Sụp đổ (Tất phản)", "Tự nhập con số"])
         
-        if scenario == "Tăng trưởng ổn định":
-            pct_change = 8.0
-        elif scenario == "Sốt nóng (Vật cực)":
-            pct_change = 35.0
-        elif scenario == "Sụp đổ (Tất phản)":
-            pct_change = -15.0
+        # SỬA ĐỔI PHẦN KỊCH BẢN THEO YÊU CẦU
+        scenario = st.sidebar.selectbox("Chọn trạng thái thị trường:", 
+            ["Bình thường", "Vật cực (Sốt nóng)", "Tất phản (Điều chỉnh)", "Đi ngang (Sideway)", "Tự nhập con số"])
+        
+        reason = ""
+        if scenario == "Bình thường":
+            pct_change = 7.5  # Trung bình +5% đến +10%
+            reason = "Kinh tế ổn định, lạm phát thấp."
+        elif scenario == "Vật cực (Sốt nóng)":
+            pct_change = 30.0 # Trung bình +20% đến +40%
+            reason = "Chiến tranh, khủng hoảng kinh tế, hoặc lạm phát phi mã."
+        elif scenario == "Tất phản (Điều chỉnh)":
+            pct_change = -15.0 # Trung bình -10% đến -20%
+            reason = "Ngân hàng Trung ương tăng lãi suất thực cao, vàng bị bán tháo."
+        elif scenario == "Đi ngang (Sideway)":
+            pct_change = 0.0   # Trung bình -5% đến +5%
+            reason = "Thị trường chờ đợi tín hiệu mới, không có biến động lớn."
         else:
             pct_change = st.sidebar.number_input("Nhập % bạn dự đoán:", value=10.0)
+            reason = "Kịch bản tùy chỉnh dựa trên phân tích cá nhân."
 
+        st.sidebar.caption(f"**Giải thích:** {reason}")
         # 6. Hiển thị Dashboard chỉ số chính
         gold_sjc_converted = ((curr_gold_usd * 1.205) / 31.1035 * curr_exchange_rate) / 1000000 + premium_sjc
         
