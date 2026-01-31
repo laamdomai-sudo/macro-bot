@@ -18,7 +18,11 @@ max_interest_rate = st.sidebar.slider("Lãi suất ngân hàng tối đa (%)", 5
 # 1. Giả lập dữ liệu
 months = ["Tháng " + str(i) for i in range(1, 13)]
 cpi = np.array([4.0, 4.5, 5.2, peak_inflation, peak_inflation-0.5, peak_inflation-1.5, 4.0, 3.5, 3.2, 3.0, 2.8, 2.5])
-nominal_rate = np.linspace(6.0, max_interest_rate, 6).tolist() + np.linspace(max_interest_rate, 7.0, 6).tolist()
+# Tạo nominal_rate dạng Array
+nominal_rate = np.concatenate([
+    np.linspace(6.0, max_interest_rate, 6), 
+    np.linspace(max_interest_rate, 7.0, 6)
+])
 real_rate = np.array(nominal_rate) - cpi
 
 # Giả lập giá Vàng và VN-Index dựa trên logic kinh tế
