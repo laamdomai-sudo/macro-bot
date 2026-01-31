@@ -94,6 +94,17 @@ try:
         st.pyplot(fig)
 
         # 8. Tham chiếu lịch sử & Phân tích
-        st.divider()
-        col_hist1, col_hist2 = st.columns([2, 1])
-        with col_hist1
+st.divider()
+col_hist1, col_hist2 = st.columns([2, 1])
+
+with col_hist1:  # <-- Phải có dấu hai chấm ở đây
+    st.subheader("📚 Lịch sử Lạm phát Việt Nam")
+    fig_h, ax_h = plt.subplots(figsize=(10, 4))
+    ax_h.bar(df_hist["Năm"].astype(str), df_hist["Lạm phát (%)"], color='tomato', alpha=0.7)
+    ax_h.axhline(cpi, color='blue', ls='--', label=f"Dự báo của bạn ({cpi}%)")
+    ax_h.legend()
+    st.pyplot(fig_h)
+
+with col_hist2:  # <-- Phải có dấu hai chấm ở đây
+    st.write("Dữ liệu chi tiết")
+    st.dataframe(df_hist, hide_index=True)
