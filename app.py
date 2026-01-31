@@ -103,24 +103,21 @@ try:
         
         col_calc1, col_calc2 = st.columns(2)
         with col_calc1:
-            st.write("**Giả định cho Vàng:**")
+            st.write("**Kênh Vàng SJC:**")
             tang_truong_vang = st.number_input("Dự báo Vàng tăng/giảm (%)", value=10.0)
             loi_nhuan_vang = von_dau_tu * (tang_truong_vang / 100)
-            st.info(f"Lợi nhuận từ Vàng: **{loi_nhuan_vang:,.0f} VNĐ**")
+            st.info(f"Lợi nhuận dự kiến từ vàng: **{loi_nhuan_vang:,.0f} VNĐ**")
 
         with col_calc2:
-            st.write("**Giả định cho Tiết kiệm:**")
+            st.write("**Kênh Tiết kiệm:**")
             loi_nhuan_bank = von_dau_tu * (ir / 100)
-            st.success(f"Lợi nhuận từ Tiết kiệm: **{loi_nhuan_bank:,.0f} VNĐ**")
+            st.success(f"Lợi nhuận chắc chắn từ Tiết kiệm: **{loi_nhuan_bank:,.0f} VNĐ**")
 
-        # Lời khuyên dựa trên Quy luật
-        chenh_lech = loi_nhuan_vang - loi_nhuan_bank
-        if real_ir > 3:
-            st.error(f"👉 **Lời khuyên:** Lãi suất thực đang cao ({real_ir:.1f}%). Tiết kiệm an toàn hơn. Vàng dễ 'Tất phản'.")
-        elif chenh_lech > 0:
-            st.warning(f"👉 **Lời khuyên:** Vàng đang lợi thế hơn {chenh_lech:,.0f} VNĐ, nhưng cẩn trọng nếu NHNN tăng lãi suất thêm.")
+        # Lời khuyên
+        if loi_nhuan_bank > loi_nhuan_vang:
+            st.error(f"👉 **TẤT PHẢN:** Gửi tiết kiệm đang hiệu quả hơn Vàng {loi_nhuan_bank - loi_nhuan_vang:,.0f} VNĐ mà không rủi ro.")
         else:
-            st.info("👉 **Lời khuyên:** Lợi nhuận cân bằng. Nên đa dạng hóa danh mục.")
+            st.warning(f"👉 **VẬT CỰC:** Vàng vẫn hấp dẫn hơn, nhưng hãy thoát hàng ngay khi Lãi suất thực tiến gần mức 4-5%.")
 
 except Exception as error:
     st.error(f"Lỗi vận hành: {error}")
