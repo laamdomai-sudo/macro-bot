@@ -60,6 +60,10 @@ try:
         ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=2, label="S&P 500", alpha=0.6)
         ax2.set_ylabel("Chứng khoán", color='#2E8B57', fontweight='bold')
         ax2.tick_params(axis='y', labelcolor='#2E8B57')
+        # Thêm dòng này vào phần vẽ biểu đồ lãi suất trong app.py
+        ax2.axhline(0, color='red', linestyle='--', linewidth=1.5, label="Điểm xoay chiều (Lãi suất thực = 0)")
+        ax2.fill_between(gold_series.index, -5, 0, color='orange', alpha=0.1, label="Vùng Vàng tăng nóng")
+        ax2.fill_between(gold_series.index, 0, 10, color='blue', alpha=0.1, label="Vùng Vàng thoái trào")
 
         plt.title("Biểu đồ Vàng & Chứng khoán (2023-2026)")
         st.pyplot(fig)
