@@ -3,63 +3,69 @@ import pandas as pd
 import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
 
-st.set_page_config(page_title="Real-time Macro Dashboard", layout="wide")
+# Cấu hình trang
+st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
 
-st.title("📈 Bảng Điều Khiển Tài Chính Thực Tế 2026")
-st.markdown("Dữ liệu được lấy trực tiếp từ **Yahoo Finance** và kết hợp dự báo vĩ mô.")
+st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
+st.markdown(f"**Ngày hiện tại:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
 
-# 1. Lấy dữ liệu thực tế từ Yahoo Finance
-@st.cache_data(ttl=3600) # Lưu bộ nhớ đệm 1 giờ
-def load_real_data():
-    # GC=F là Vàng, ^VNINDEX là chỉ số chứng khoán VN (nếu Yahoo có update) 
-    # Hoặc dùng ^GSPC (S&P 500) để thay thế cho xu hướng toàn cầu
-    gold = yf.download("GC=F", start="2024-01-01", end="2026-12-31")['Close']
-    vni = yf.download("^GSPC", start="2024-01-01", end="2026-12-31")['Close'] # Demo bằng S&P500
-    return gold, vni
+# 1. Hàm lấy dữ liệu từ Yahoo Finance
+@st.cache_data(ttl=3600)
+def load_data():
+    # Lấy dữ liệu Vàng (GC=F) và S&P 500 (^GSPC) làm đại diện thị trường rủi ro
+    # Bạn có thể đổi ^GSPC thành E1VFVN30.HM để xem VN30
+    tickers = ["GC=F", "^GSPC"]
+    data = yf.download(tickers, start="2023-01-01")['Close']
+    return data
 
+# 2. Xử lý dữ liệu
 try:
-    gold_data, vni_data = load_real_data()
-
-    # 2.Sidebar cấu hình Lạm phát & Lãi suất (Vì không có API thực thời gian thực cho CPI VN)
-    st.sidebar.header("Thông số Vĩ mô Dự báo (2026)")
-    cpi_val = st.sidebar.slider("Tỷ lệ Lạm phát dự kiến (%)", 2.0, 10.0, 4.5)
-    ir_val = st.sidebar.slider("Lãi suất huy động (%)", 3.0, 12.0, 7.0)
+    raw_data = load_data()
     
-    real_rate = ir_val - cpi_val
+    # Kiểm tra nếu dữ liệu bị trống
+    if raw_data.empty:
+        st.error("Không thể lấy dữ liệu từ Yahoo Finance. Vui lòng kiểm tra lại kết nối.")
+    else:
+        # Xử lý dữ liệu để lấy đúng cột
+        gold = raw_data["GC=F"].dropna()
+        stock = raw_data["^GSPC"].dropna()
 
-    # 3. Tính toán tương quan
-    col1, col2, col3 = st.columns(3)
-    current_gold = gold_data.iloc[-1]
-    col1.metric("Giá Vàng Hiện Tại", f"{current_gold:,.2f} USD/oz")
-    col2.metric("Lãi Suất Thực", f"{real_rate:.2f} %", delta_color="inverse")
-    col3.metric("Xu Hướng Chứng Khoán", f"{vni_data.iloc[-1]:,.2f} pts")
+        # Lấy giá trị cuối cùng an toàn
+        current_gold = gold.iloc[-1]
+        current_stock = stock.iloc[-1]
 
-    # 4. Vẽ biểu đồ dữ liệu thực
-    fig, ax1 = plt.subplots(figsize=(10, 5))
+        # 3. Sidebar điều chỉnh giả định 2026
+        st.sidebar.header("Dự báo Kinh tế 2026")
+        cpi = st.sidebar.slider("Lạm phát dự kiến (%)", 1.0, 15.0, 4.5)
+        interest_rate = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 15.0, 7.5)
+        real_rate = interest_rate - cpi
 
-    # Trục Vàng
-    ax1.set_ylabel("Giá Vàng (USD)", color="gold", fontweight="bold")
-    ax1.plot(gold_data.index, gold_data, color="gold", label="Giá Vàng thực tế")
-    ax1.tick_params(axis='y', labelcolor="gold")
+        # 4. Hiển thị Widget chỉ số
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Giá Vàng (USD/oz)", f"{current_gold:,.2f}")
+        col2.metric("Lãi Suất Thực (%)", f"{real_rate:.1f}%", delta=f"{real_rate - 2.0:.1f}% từ mốc cơ sở")
+        col3.metric("Chỉ số Chứng khoán", f"{current_stock:,.2f}")
 
-    # Trục Chứng khoán
-    ax2 = ax1.twinx()
-    ax2.set_ylabel("Chỉ số Chứng khoán", color="seagreen", fontweight="bold")
-    ax2.plot(vni_data.index, vni_data, color="seagreen", alpha=0.6, label="Chứng khoán")
-    ax2.tick_params(axis='y', labelcolor="seagreen")
+        # 5. Vẽ biểu đồ tương quan
+        st.subheader("Biến động Tài sản thực tế (Dữ liệu Live)")
+        fig, ax1 = plt.subplots(figsize=(12, 6))
 
-    plt.title("Biến động Vàng & Chứng khoán (Dữ liệu Yahoo Finance)")
-    st.pyplot(fig)
+        # Trục bên trái cho Vàng
+        ax1.plot(gold.index, gold, color='gold', linewidth=2, label="Giá Vàng")
+        ax1.set_ylabel("Vàng (USD/oz)", color='gold', fontsize=12, fontweight='bold')
+        ax1.tick_params(axis='y', labelcolor='gold')
+        ax1.grid(True, alpha=0.2)
 
-    # 5. Phân tích Quy luật
-    st.subheader("🧐 Đánh giá 'Vật cực tất phản'")
-    if current_gold > 2800 and real_rate < 1:
-        st.warning("⚠️ **VẬT CỰC:** Giá vàng đang ở vùng đỉnh lịch sử trong khi lãi suất thực quá thấp. Rủi ro bong bóng rất cao!")
-    elif real_rate > 4:
-        st.info("🔄 **TẤT PHẢN:** Lãi suất thực đang tăng cao. Dòng tiền có xu hướng rời bỏ Vàng để quay lại Ngân hàng và Chứng khoán giá rẻ.")
+        # Trục bên phải cho Chứng khoán
+        ax2 = ax1.twinx()
+        ax2.plot(stock.index, stock, color='seagreen', linewidth=2, label="Chứng khoán", alpha=0.7)
+        ax2.set_ylabel("Chứng khoán (Index)", color='seagreen', fontsize=12, fontweight='bold')
+        ax2.tick_params(axis='y', labelcolor='seagreen')
 
-except Exception as e:
-    st.error(f"Lỗi khi lấy dữ liệu: {e}")
-    st.info("Gợi ý: Kiểm tra kết nối internet hoặc giới hạn API của Yahoo Finance.")
+        plt.title("Tương quan Vàng & Chứng khoán trong chu kỳ 2024 - 2026")
+        st.pyplot(fig)
+
+        # 6. Đánh giá Quy luật Vật cực tất phản
+        st.divider()
+        st.subheader("💡 Đánh giá từ hệ thống")
