@@ -4,13 +4,28 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 1. Cấu hình giao diện & Dark Mode
+# 0. Khởi tạo Trạng thái Giao diện (Session State)
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'Light'
+
+# Tạo nút chuyển đổi ở Sidebar
+st.sidebar.subheader("🌓 Tùy chỉnh giao diện")
+if st.sidebar.button("Chuyển đổi Light/Dark"):
+    st.session_state.theme = 'Dark' if st.session_state.theme == 'Light' else 'Light'
+
+# Thiết lập màu sắc dựa trên lựa chọn
+if st.session_state.theme == 'Dark':
+    bg_color = '#0E1117'
+    text_color = 'white'
+    plt.style.use('dark_background')
+else:
+    bg_color = 'white'
+    text_color = 'black'
+    plt.style.use('default')
+    
+# 1. Cấu hình trang
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
-
-# Áp dụng style tối cho biểu đồ Matplotlib
-plt.style.use('dark_background')
-
-st.title("📊 Macro-Bot: Quy luật 'Vật cực tất phản'")
+st.title(f"📊 Macro-Bot ({st.session_state.theme} Mode)")
 st.markdown(f"**Dữ liệu thực tế ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
 
 # 2. Dữ liệu lịch sử lạm phát 
