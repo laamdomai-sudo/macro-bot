@@ -13,7 +13,6 @@ st.markdown(f"**Cập nhật dữ liệu ngày:** {pd.Timestamp.now().strftime('
 # 2. Hàm lấy dữ liệu (Sử dụng Cache để tăng tốc)
 @st.cache_data(ttl=3600)
 def load_data():
-    # Lấy Vàng thế giới và S&P 500 làm tham chiếu
     tickers = ["GC=F", "^GSPC"]
     data = yf.download(tickers, start="2023-01-01")['Close']
     return data
@@ -42,15 +41,23 @@ try:
         # 5. Hiển thị thông số nhanh
         c1, c2, c3 = st.columns(3)
         c1.metric("Vàng (USD/oz)", f"{curr_gold:,.1f}")
-        c2.metric("Lãi Suất Thực", f"{real_ir:.1f}%")
+        c2.metric("Lãi Suất Thực", f"{real_ir:.1f}%", delta=f"{real_ir-2.0:.1f}%")
         c3.metric("S&P 500", f"{curr_stock:,.1f}")
 
-        # 6. Vẽ biểu đồ
-        st.subheader("Diễn biến tương quan Live")
+        # 6. Vẽ biểu đồ tương quan Live & Dự báo
+        st.subheader("Diễn biến tương quan & Dự báo biến động")
+        
+        # Tạo dữ liệu dự báo ngắn hạn (30 ngày tới) dựa trên Lãi suất thực
+        future_dates = pd.date_range(start=gold_series.index[-1], periods=30)
+        # Nếu lãi suất thực tăng -> Vàng có xu hướng giảm nhẹ trong dự báo và ngược lại
+        gold_projection = [curr_gold * (1 - (real_ir/500))**i for i in range(30)]
+        
         fig, ax1 = plt.subplots(figsize=(10, 5))
 
-        # Đường Vàng
-        ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng")
+        # Đường Vàng thực tế & Dự báo
+        ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng thực tế")
+        ax1.plot(future_dates, gold_projection, color='#D4AF37', ls='--', alpha=0.7, label="Dự báo hướng đi")
+        
         ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
         ax1.tick_params(axis='y', labelcolor='#D4AF37')
         ax1.grid(True, alpha=0.2)
@@ -58,20 +65,20 @@ try:
         # Đường Chứng khoán
         ax2 = ax1.twinx()
         ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=2, label="S&P 500", alpha=0.6)
-        ax2.set_ylabel("Chứng khoán", color='#2E8B57', fontweight='bold')
-        ax2.tick_params(axis='y', labelcolor='#2E8B57')
-        # Thêm dòng này vào phần vẽ biểu đồ lãi suất trong app.py
-        ax2.axhline(0, color='red', linestyle='--', linewidth=1.5, label="Điểm xoay chiều (Lãi suất thực = 0)")
-        ax2.fill_between(gold_series.index, -5, 0, color='orange', alpha=0.1, label="Vùng Vàng tăng nóng")
-        ax2.fill_between(gold_series.index, 0, 10, color='blue', alpha=0.1, label="Vùng Vàng thoái trào")
+        
+        # Chỉ báo vùng nhạy cảm lãi suất
+        if real_ir > 0:
+            ax1.axvspan(gold_series.index[-1], future_dates[-1], color='blue', alpha=0.1, label="Vùng hút tiền")
+        else:
+            ax1.axvspan(gold_series.index[-1], future_dates[-1], color='orange', alpha=0.1, label="Vùng trú ẩn")
 
-        plt.title("Biểu đồ Vàng & Chứng khoán (2023-2026)")
+        plt.title(f"Tương quan thực tế & Tác động của Lãi suất thực ({real_ir:.1f}%)")
+        ax1.legend(loc='upper left', fontsize='small')
         st.pyplot(fig)
 
         # 7. Phân tích logic "Vật cực tất phản"
         st.divider()
         st.subheader("💡 Nhận định hệ thống")
-        
         col_a, col_b = st.columns(2)
         with col_a:
             if real_ir < 0:
@@ -87,33 +94,33 @@ try:
             else:
                 st.write("Dòng tiền vẫn đang vận hành theo kỳ vọng lạm phát.")
 
+        # 8. Tính toán lợi nhuận thực tế
+        st.divider()
+        st.subheader("🧮 Máy tính So sánh Đầu tư")
+        
+        # Cho phép người dùng nhập vốn
+        von_dau_tu = st.number_input("Nhập số vốn đầu tư của bạn (VNĐ):", min_value=0, value=1000000000, step=10000000)
+        
+        col_calc1, col_calc2 = st.columns(2)
+        with col_calc1:
+            st.write("**Giả định cho Vàng:**")
+            tang_truong_vang = st.number_input("Dự báo Vàng tăng/giảm (%)", value=10.0)
+            loi_nhuan_vang = von_dau_tu * (tang_truong_vang / 100)
+            st.info(f"Lợi nhuận từ Vàng: **{loi_nhuan_vang:,.0f} VNĐ**")
+
+        with col_calc2:
+            st.write("**Giả định cho Tiết kiệm:**")
+            loi_nhuan_bank = von_dau_tu * (ir / 100)
+            st.success(f"Lợi nhuận từ Tiết kiệm: **{loi_nhuan_bank:,.0f} VNĐ**")
+
+        # Lời khuyên dựa trên Quy luật
+        chenh_lech = loi_nhuan_vang - loi_nhuan_bank
+        if real_ir > 3:
+            st.error(f"👉 **Lời khuyên:** Lãi suất thực đang cao ({real_ir:.1f}%). Tiết kiệm an toàn hơn. Vàng dễ 'Tất phản'.")
+        elif chenh_lech > 0:
+            st.warning(f"👉 **Lời khuyên:** Vàng đang lợi thế hơn {chenh_lech:,.0f} VNĐ, nhưng cẩn trọng nếu NHNN tăng lãi suất thêm.")
+        else:
+            st.info("👉 **Lời khuyên:** Lợi nhuận cân bằng. Nên đa dạng hóa danh mục.")
+
 except Exception as error:
     st.error(f"Lỗi vận hành: {error}")
-
-# 8. Tính toán lợi nhuận thực tế (So sánh Vàng vs Tiết kiệm)
-st.divider()
-st.subheader("🧮 Máy tính So sánh Đầu tư (Dự báo cho 1 tỷ VNĐ)")
-
-col_calc1, col_calc2 = st.columns(2)
-
-with col_calc1:
-    vốn = 1000000000 # 1 tỷ VNĐ
-    st.write("**Giả định cho Vàng:**")
-    tang_truong_vang = st.number_input("Dự báo Vàng tăng/giảm (%)", value=10.0)
-    loi_nhuan_vang = vốn * (tang_truong_vang / 100)
-    st.info(f"Lợi nhuận từ Vàng: **{loi_nhuan_vang:,.0f} VNĐ**")
-
-with col_calc2:
-    st.write("**Giả định cho Tiết kiệm:**")
-    # Lấy lãi suất danh nghĩa từ sidebar
-    loi_nhuan_bank = vốn * (ir / 100)
-    st.success(f"Lợi nhuận từ Tiết kiệm: **{loi_nhuan_bank:,.0f} VNĐ**")
-
-# Lời khuyên dựa trên Quy luật
-chenh_lech = loi_nhuan_vang - loi_nhuan_bank
-if real_ir > 3:
-    st.error(f"👉 **Lời khuyên:** Lãi suất thực đang cao ({real_ir:.1f}%). Tiết kiệm đang trở nên an toàn và hiệu quả hơn. Vàng có nguy cơ giảm mạnh.")
-elif chenh_lech > 0:
-    st.warning(f"👉 **Lời khuyên:** Vàng đang có lợi suất cao hơn {chenh_lech:,.0f} VNĐ, nhưng hãy cẩn thận với 'điểm gãy' khi NHNN tăng lãi suất.")
-else:
-    st.info("👉 **Lời khuyên:** Lợi nhuận từ hai kênh đang cân bằng. Hãy ưu tiên tính thanh khoản.")
