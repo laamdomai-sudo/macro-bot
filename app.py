@@ -4,40 +4,46 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Magic CSS để đổi màu nền toàn bộ trang web
-if st.session_state.theme == 'Dark':
-    st.markdown("""
-        <style>
-        .stApp { background-color: #0E1117; color: white; }
-        .stMetric { background-color: #262730; padding: 10px; border-radius: 10px; }
-        </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-        <style>
-        .stApp { background-color: white; color: black; }
-        .stMetric { background-color: #F0F2F6; padding: 10px; border-radius: 10px; }
-        </style>
-    """, unsafe_allow_html=True)
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import numpy as np
 
-#0. Khởi tạo Trạng thái Giao diện (Session State)
+# 0. Khởi tạo Trạng thái Giao diện (CHỐT CHẶN LỖI)
 if 'theme' not in st.session_state:
-    st.session_state.theme = 'Light'
+    st.session_state['theme'] = 'Light'  # Thiết lập mặc định là Light
 
 # Tạo nút chuyển đổi ở Sidebar
 st.sidebar.subheader("🌓 Tùy chỉnh giao diện")
 if st.sidebar.button("Chuyển đổi Light/Dark"):
-    st.session_state.theme = 'Dark' if st.session_state.theme == 'Light' else 'Light'
+    if st.session_state.theme == 'Light':
+        st.session_state.theme = 'Dark'
+    else:
+        st.session_state.theme = 'Light'
 
-# Thiết lập màu sắc dựa trên lựa chọn
-if st.session_state.theme == 'Dark':
+# Thiết lập màu sắc dựa trên lựa chọn (Đảm bảo biến luôn tồn tại)
+theme_choice = st.session_state.theme
+
+if theme_choice == 'Dark':
     bg_color = '#0E1117'
     text_color = 'white'
     plt.style.use('dark_background')
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0E1117; color: white; }
+        [data-testid="stMetricValue"] { color: #D4AF37 !important; }
+        </style>
+    """, unsafe_allow_html=True)
 else:
     bg_color = 'white'
     text_color = 'black'
     plt.style.use('default')
+    st.markdown("""
+        <style>
+        .stApp { background-color: white; color: black; }
+        </style>
+    """, unsafe_allow_html=True)
     
 # 1. Cấu hình trang
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
