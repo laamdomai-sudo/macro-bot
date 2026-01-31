@@ -4,58 +4,84 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Cấu hình trang
+# 1. Cấu hình giao diện
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
 
 st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
-st.markdown(f"**Ngày hiện tại:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
+st.markdown(f"**Cập nhật dữ liệu ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
 
-# 1. Hàm lấy dữ liệu từ Yahoo Finance
+# 2. Hàm lấy dữ liệu (Sử dụng Cache để tăng tốc)
 @st.cache_data(ttl=3600)
 def load_data():
-    # Sử dụng mã Vàng thế giới và S&P 500 làm chuẩn
+    # Lấy Vàng thế giới và S&P 500 làm tham chiếu
     tickers = ["GC=F", "^GSPC"]
     data = yf.download(tickers, start="2023-01-01")['Close']
     return data
 
-# Bắt đầu khối kiểm soát lỗi
+# 3. Luồng xử lý chính
 try:
-    raw_data = load_data()
+    df_raw = load_data()
     
-    if raw_data.empty:
-        st.error("Không thể lấy dữ liệu từ Yahoo Finance. Vui lòng kiểm tra lại kết nối.")
+    if df_raw.empty:
+        st.error("Dữ liệu trống. Vui lòng kiểm tra kết nối Yahoo Finance.")
     else:
-        # Xử lý tách dữ liệu
-        gold = raw_data["GC=F"].dropna()
-        stock = raw_data["^GSPC"].dropna()
+        # Tách dữ liệu an toàn
+        gold_series = df_raw["GC=F"].dropna()
+        stock_series = df_raw["^GSPC"].dropna()
 
-        current_gold = float(gold.iloc[-1])
-        current_stock = float(stock.iloc[-1])
+        # Lấy giá trị hiện tại
+        curr_gold = float(gold_series.iloc[-1])
+        curr_stock = float(stock_series.iloc[-1])
 
-        # 2. Sidebar điều chỉnh giả định 2026
+        # 4. Thanh điều hướng cấu hình giả định
         st.sidebar.header("Dự báo Kinh tế 2026")
         cpi = st.sidebar.slider("Lạm phát dự kiến (%)", 1.0, 15.0, 4.5)
-        interest_rate = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 15.0, 7.5)
-        real_rate = interest_rate - cpi
+        ir = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 15.0, 7.5)
+        real_ir = ir - cpi
 
-        # 3. Hiển thị Widget chỉ số
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Giá Vàng (USD/oz)", f"{current_gold:,.2f}")
-        col2.metric("Lãi Suất Thực (%)", f"{real_rate:.1f}%")
-        col3.metric("Chỉ số Chứng khoán", f"{current_stock:,.2f}")
+        # 5. Hiển thị thông số nhanh
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Vàng (USD/oz)", f"{curr_gold:,.1f}")
+        c2.metric("Lãi Suất Thực", f"{real_ir:.1f}%")
+        c3.metric("S&P 500", f"{curr_stock:,.1f}")
 
-        # 4. Vẽ biểu đồ tương quan
-        st.subheader("Biến động Tài sản thực tế (Dữ liệu Live)")
-        fig, ax1 = plt.subplots(figsize=(12, 6))
+        # 6. Vẽ biểu đồ
+        st.subheader("Diễn biến tương quan Live")
+        fig, ax1 = plt.subplots(figsize=(10, 5))
 
-        ax1.plot(gold.index, gold, color='gold', linewidth=2, label="Giá Vàng")
-        ax1.set_ylabel("Vàng (USD/oz)", color='gold', fontsize=12, fontweight='bold')
-        ax1.tick_params(axis='y', labelcolor='gold')
+        # Đường Vàng
+        ax1.plot(gold_series.index, gold_series, color='#D4AF37', lw=2, label="Vàng")
+        ax1.set_ylabel("Giá Vàng (USD)", color='#D4AF37', fontweight='bold')
+        ax1.tick_params(axis='y', labelcolor='#D4AF37')
         ax1.grid(True, alpha=0.2)
 
+        # Đường Chứng khoán
         ax2 = ax1.twinx()
-        ax2.plot(stock.index, stock, color='seagreen', linewidth=2, label="Chứng khoán", alpha=0.7)
-        ax2.set_ylabel("Chứng khoán (Index)", color='seagreen', fontsize=12, fontweight='bold')
-        ax2.tick_params(axis='y', labelcolor='seagreen')
+        ax2.plot(stock_series.index, stock_series, color='#2E8B57', lw=2, label="S&P 500", alpha=0.6)
+        ax2.set_ylabel("Chứng khoán", color='#2E8B57', fontweight='bold')
+        ax2.tick_params(axis='y', labelcolor='#2E8B57')
 
-        plt.
+        plt.title("Biểu đồ Vàng & Chứng khoán (2023-2026)")
+        st.pyplot(fig)
+
+        # 7. Phân tích logic "Vật cực tất phản"
+        st.divider()
+        st.subheader("💡 Nhận định hệ thống")
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if real_ir < 0:
+                st.warning("⚠️ **VẬT CỰC:** Lãi suất thực âm. Vàng đang được hỗ trợ cực mạnh.")
+            elif real_ir > 4:
+                st.success("🏦 **TẤT PHẢN:** Lãi suất thực cao. Tiền đang có xu hướng rời vàng về Bank.")
+            else:
+                st.info("Thị trường đang ở vùng trung tính.")
+
+        with col_b:
+            if curr_gold > 2800 and real_ir > 3:
+                st.error("‼️ **ĐIỂM GÃY:** Rủi ro bong bóng vàng cực lớn khi lãi suất thực bắt đầu dương cao.")
+            else:
+                st.write("Dòng tiền vẫn đang vận hành theo kỳ vọng lạm phát.")
+
+except Exception as error:
+    st.error(f"Lỗi vận hành: {error}")
