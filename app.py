@@ -29,19 +29,45 @@ def load_data():
 # 4. Luồng xử lý chính
 try:
     df_raw = load_data()
-    
-    if df_raw.empty:
-        st.error("Dữ liệu trống. Vui lòng kiểm tra kết nối Yahoo Finance.")
-    else:
-        # Tách dữ liệu an toàn
+   if not df_raw.empty:
+        # Tách dữ liệu
         gold_series = df_raw["GC=F"].dropna()
         stock_series = df_raw["^GSPC"].dropna()
+        usdvnd_series = df_raw["VND=X"].dropna()
+        
+        curr_gold_usd = float(gold_series.iloc[-1])
+        curr_exchange_rate = float(usdvnd_series.iloc[-1])
 
-        # Lấy giá trị hiện tại
-        curr_gold = float(gold_series.iloc[-1])
-        curr_stock = float(stock_series.iloc[-1])
+        # 5. Sidebar cấu hình
+        st.sidebar.header("🕹️ Điều khiển Vĩ mô 2026")
+        cpi = st.sidebar.slider("Lạm phát dự kiến (%)", 1.0, 20.0, 4.5)
+        ir = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 20.0, 7.5)
+        premium_sjc = st.sidebar.number_input("Chênh lệch SJC (Tr/lượng)", value=4.0)
+        real_ir = ir - cpi
 
-        # 5. Thanh điều hướng cấu hình giả định (Sidebar)
+        ##. TÍNH NĂNG MỚI: Kịch bản Vàng
+        st.sidebar.divider()
+        st.sidebar.header("🏆 Kịch bản Vàng 2026")
+        scenario = st.sidebar.selectbox("Chọn kịch bản thị trường:", 
+            ["Tăng trưởng ổn định", "Sốt nóng (Vật cực)", "Sụp đổ (Tất phản)", "Tự nhập con số"])
+        
+        if scenario == "Tăng trưởng ổn định":
+            pct_change = 8.0
+        elif scenario == "Sốt nóng (Vật cực)":
+            pct_change = 35.0
+        elif scenario == "Sụp đổ (Tất phản)":
+            pct_change = -15.0
+        else:
+            pct_change = st.sidebar.number_input("Nhập % bạn dự đoán:", value=10.0)
+
+        ##. Hiển thị Dashboard
+        gold_sjc = ((curr_gold_usd * 1.205) / 31.1035 * curr_exchange_rate) / 1000000 + premium_sjc
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Vàng SJC Hiện tại", f"{gold_sjc:.2f} Tr")
+        c2.metric("Lãi Suất Thực", f"{real_ir:.1f}%")
+        c3.metric("Kịch bản Vàng", f"{pct_change}%")
+       
+        ##. Thanh điều hướng cấu hình giả định (Sidebar)
         st.sidebar.header("Dự báo Kinh tế 2026")
         cpi = st.sidebar.slider("Lạm phát dự kiến (%)", 1.0, 15.0, 4.5)
         ir = st.sidebar.slider("Lãi suất huy động (%)", 1.0, 15.0, 7.5)
