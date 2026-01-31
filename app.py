@@ -76,6 +76,22 @@ try:
         ax1.legend(loc='upper left', fontsize='small')
         st.pyplot(fig)
 
+        ### Lịch sử Lạm phát Việt Nam (Tham chiếu)
+        st.divider()
+        st.subheader("📚 Tham chiếu Lịch sử Lạm phát Việt Nam")
+        st.write("Dựa vào dữ liệu quá khứ để xác định điểm 'Vật cực' của chu kỳ hiện tại.")
+        
+        col_hist1, col_hist2 = st.columns([2, 1])
+        with col_hist1:
+            fig_hist, ax_hist = plt.subplots(figsize=(10, 4))
+            ax_hist.bar(df_hist["Năm"].astype(str), df_hist["Lạm phát (%)"], color='tomato', alpha=0.7)
+            ax_hist.axhline(cpi, color='blue', ls='--', label=f"Dự báo 2026 của bạn ({cpi}%)")
+            ax_hist.set_ylabel("Lạm phát (%)")
+            ax_hist.legend()
+            st.pyplot(fig_hist)
+        with col_hist2:
+            st.dataframe(df_hist, hide_index=True)
+
         # 7. Phân tích logic "Vật cực tất phản"
         st.divider()
         st.subheader("💡 Nhận định hệ thống")
