@@ -4,50 +4,11 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-import streamlit as st
-import pandas as pd
-import yfinance as yf
-import matplotlib.pyplot as plt
-import numpy as np
-
-# 0. Khởi tạo Trạng thái Giao diện (CHỐT CHẶN LỖI)
-if 'theme' not in st.session_state:
-    st.session_state['theme'] = 'Light'  # Thiết lập mặc định là Light
-
-# Tạo nút chuyển đổi ở Sidebar
-st.sidebar.subheader("🌓 Tùy chỉnh giao diện")
-if st.sidebar.button("Chuyển đổi Light/Dark"):
-    if st.session_state.theme == 'Light':
-        st.session_state.theme = 'Dark'
-    else:
-        st.session_state.theme = 'Light'
-
-# Thiết lập màu sắc dựa trên lựa chọn (Đảm bảo biến luôn tồn tại)
-theme_choice = st.session_state.theme
-
-if theme_choice == 'Dark':
-    bg_color = '#0E1117'
-    text_color = 'white'
-    plt.style.use('dark_background')
-    st.markdown("""
-        <style>
-        .stApp { background-color: #0E1117; color: white; }
-        [data-testid="stMetricValue"] { color: #D4AF37 !important; }
-        </style>
-    """, unsafe_allow_html=True)
-else:
-    bg_color = 'white'
-    text_color = 'black'
-    plt.style.use('default')
-    st.markdown("""
-        <style>
-        .stApp { background-color: white; color: black; }
-        </style>
-    """, unsafe_allow_html=True)
-    
-# 1. Cấu hình trang
+# 1. Cấu hình giao diện
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
-st.title(f"📊 Macro-Bot ({st.session_state.theme} Mode)")
+
+st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
+st.markdown(f"**Cập nhật dữ liệu ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
 
 # 2. Dữ liệu lịch sử lạm phát 
 vn_inflation_hist = {
