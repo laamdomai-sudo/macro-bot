@@ -4,10 +4,44 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 1. Cấu hình giao diện
+# Magic CSS để đổi màu nền toàn bộ trang web
+if st.session_state.theme == 'Dark':
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0E1117; color: white; }
+        .stMetric { background-color: #262730; padding: 10px; border-radius: 10px; }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+        .stApp { background-color: white; color: black; }
+        .stMetric { background-color: #F0F2F6; padding: 10px; border-radius: 10px; }
+        </style>
+    """, unsafe_allow_html=True)
+
+#0. Khởi tạo Trạng thái Giao diện (Session State)
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'Light'
+
+# Tạo nút chuyển đổi ở Sidebar
+st.sidebar.subheader("🌓 Tùy chỉnh giao diện")
+if st.sidebar.button("Chuyển đổi Light/Dark"):
+    st.session_state.theme = 'Dark' if st.session_state.theme == 'Light' else 'Light'
+
+# Thiết lập màu sắc dựa trên lựa chọn
+if st.session_state.theme == 'Dark':
+    bg_color = '#0E1117'
+    text_color = 'white'
+    plt.style.use('dark_background')
+else:
+    bg_color = 'white'
+    text_color = 'black'
+    plt.style.use('default')
+    
+# 1. Cấu hình trang
 st.set_page_config(page_title="Macro Dashboard 2026", layout="wide")
-st.title("📊 Hệ thống Theo dõi Vĩ mô & Quy luật 'Vật cực tất phản'")
-st.markdown(f"**Cập nhật dữ liệu ngày:** {pd.Timestamp.now().strftime('%d/%m/%Y')}")
+st.title(f"📊 Macro-Bot ({st.session_state.theme} Mode)")
 
 # 2. Dữ liệu lịch sử lạm phát 
 vn_inflation_hist = {
